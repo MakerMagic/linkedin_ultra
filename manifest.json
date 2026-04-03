@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn CRM Bootstrap",
-  "description": "Открывает LinkedIn Connections при запуске браузера без дублей вкладок.",
-  "version": "0.1.0",
+  "description": "LinkedIn CRM — панель и фоновая подготовка Connections.",
+  "version": "0.2.0",
   "icons": {
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
@@ -10,15 +10,9 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": [
-    "tabs",
-    "storage",
-    "notifications"
-  ],
-  "host_permissions": [
-    "https://www.linkedin.com/*"
-  ],
+  "permissions": ["tabs", "notifications"],
+  "host_permissions": ["https://www.linkedin.com/*"],
   "action": {
-    "default_title": "LinkedIn CRM Bootstrap"
+    "default_title": "Открыть LinkedIn CRM"
   }
 }
