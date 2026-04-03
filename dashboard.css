@@ -99,7 +99,7 @@ body {
   color: var(--text);
   border-color: rgba(99, 102, 241, 0.45);
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.12));
-  cursor: default;
+  cursor: pointer;
 }
 
 .nav__item--soon {
@@ -128,8 +128,27 @@ body {
   max-width: 1040px;
 }
 
+.main-panel {
+  display: none;
+}
+
+.main-panel--active {
+  display: block;
+}
+
 .main__header {
   margin-bottom: 28px;
+}
+
+.main__header--row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.main__header-text {
+  min-width: 0;
 }
 
 .main__h1 {
@@ -311,4 +330,214 @@ body {
   font-size: 13px;
   color: var(--muted);
   line-height: 1.5;
+}
+
+/* Подсказка с «?» у заголовка Поиск */
+.help-tip {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.help-tip__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.help-tip__btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.help-tip__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.help-tip__popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: min(280px, 90vw);
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(18, 26, 43, 0.95);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.help-tip:hover .help-tip__popover,
+.help-tip:focus-within .help-tip__popover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.help-tip__text {
+  margin: 0;
+}
+
+.help-tip__link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.help-tip__link:hover {
+  color: #a5b4fc;
+}
+
+/* Форма поиска */
+.search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.field__input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.field__input::placeholder {
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.field__input:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.field__input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.field__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.industry-fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.industry-fieldset__hint {
+  margin: -4px 0 0;
+}
+
+.tag-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tag-select__item {
+  position: relative;
+}
+
+.tag-select__input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.tag-select__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, transform 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+.tag-select__pill:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.tag-select__input:focus-visible + .tag-select__pill {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tag-select__input:checked + .tag-select__pill {
+  color: var(--text);
+  border-color: rgba(99, 102, 241, 0.55);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.15));
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.2);
+}
+
+.tag-select__input:checked + .tag-select__pill:hover {
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.28);
+}
+
+.search-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 4px;
 }
