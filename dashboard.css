@@ -28,7 +28,7 @@ html,body {
   min-height: 100vh;
 }
 
-/* ——— Layout ——— */
+/* ── Layout ── */
 
 .app {
   display: grid;
@@ -70,11 +70,15 @@ html,body {
   font-size: 14px;
   text-align: left;
   cursor: pointer;
-  transition: background .2s, color .2s, border-color .2s, transform .15s;
+  transition: background .2s, color .2s, border-color .2s;
 }
 
 .nav__item:not(:disabled):hover { background: rgba(255,255,255,.05); color: var(--text); }
-.nav__item--active { color: var(--text); border-color: rgba(99,102,241,.45); background: linear-gradient(135deg,rgba(99,102,241,.2),rgba(139,92,246,.12)); }
+.nav__item--active {
+  color: var(--text);
+  border-color: rgba(99,102,241,.45);
+  background: linear-gradient(135deg,rgba(99,102,241,.2),rgba(139,92,246,.12));
+}
 .nav__item--soon { opacity: .45; cursor: not-allowed; }
 .nav__icon { flex-shrink: 0; }
 
@@ -100,7 +104,7 @@ html,body {
 .main__h1 { margin: 0 0 8px; font-size: 28px; font-weight: 700; letter-spacing: -.03em; }
 .main__sub { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
 
-/* ——— Card / Glass ——— */
+/* ── Card / Glass ── */
 
 .glass {
   background: var(--glass);
@@ -111,36 +115,49 @@ html,body {
 }
 
 .card { padding: 28px 32px 32px; }
-.card__title { margin: 0 0 24px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.card__title {
+  margin: 0 0 24px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
 
-/* ——— Sync layout ——— */
+/* ── Sync layout ── */
 
 .sync-layout { display: grid; grid-template-columns: auto 1fr; gap: 36px; align-items: center; }
-
 .sync-meta { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .sync-status { margin: 0; font-size: 16px; color: var(--text); }
 
 .sync-counter { margin: 0; font-size: 14px; color: var(--muted); }
-.sync-counter__value { color: var(--text); font-size: 20px; font-weight: 700; margin-left: 6px; letter-spacing: -.02em; }
+.sync-counter__value {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  margin-left: 6px;
+  letter-spacing: -.02em;
+}
 
 .sync-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .sync-export { display: flex; flex-direction: column; gap: 8px; }
 
-/* ——— Progress ring ——— */
+/* ── Прогресс-кольцо ── */
 
 .progress-ring { position: relative; width: 160px; height: 160px; flex-shrink: 0; }
-.progress-ring__svg { width: 160px; height: 160px; transform: rotate(-90deg); }
 
-@keyframes ring-spin {
-  from { transform: rotate(-90deg); }
-  to   { transform: rotate(270deg); }
+.progress-ring__svg {
+  width: 160px;
+  height: 160px;
+  transform: rotate(-90deg);
 }
 
-.progress-ring__svg--spinning {
-  animation: ring-spin 1.4s linear infinite;
+.progress-ring__track {
+  fill: none;
+  stroke: rgba(255,255,255,.08);
+  stroke-width: 10;
 }
 
-.progress-ring__track { fill: none; stroke: rgba(255,255,255,.08); stroke-width: 10; }
 .progress-ring__fill {
   fill: none;
   stroke: url(#ringGrad);
@@ -148,13 +165,8 @@ html,body {
   stroke-linecap: round;
   stroke-dasharray: 326.73;
   stroke-dashoffset: 326.73;
-  transition: stroke-dashoffset .5s ease;
-}
-
-/* Во время спиннера — показываем ~30% дуги */
-.progress-ring__svg--spinning .progress-ring__fill {
-  stroke-dashoffset: 230;
-  transition: none;
+  /* Плавная анимация заполнения */
+  transition: stroke-dashoffset 0.7s ease;
 }
 
 .progress-ring__label {
@@ -168,9 +180,9 @@ html,body {
 }
 
 .progress-ring__value { font-size: 36px; letter-spacing: -.04em; }
-.progress-ring__pct { font-size: 18px; color: var(--muted); align-self: center; margin-top: 6px; }
+.progress-ring__pct   { font-size: 18px; color: var(--muted); align-self: center; margin-top: 6px; }
 
-/* ——— Buttons ——— */
+/* ── Кнопки ── */
 
 .btn {
   display: inline-flex;
@@ -210,11 +222,14 @@ html,body {
   border-color: rgba(34,197,94,.3);
   align-self: flex-start;
 }
-.btn--export:not(:disabled):hover { background: rgba(34,197,94,.14); border-color: rgba(34,197,94,.5); }
+.btn--export:not(:disabled):hover {
+  background: rgba(34,197,94,.14);
+  border-color: rgba(34,197,94,.5);
+}
 
 .sync-hint { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
 
-/* ——— Help-tip ——— */
+/* ── Help-tip ── */
 
 .help-tip { position: relative; flex-shrink: 0; margin-top: 4px; }
 
@@ -231,7 +246,7 @@ html,body {
   color: var(--muted);
   cursor: pointer;
   overflow: visible;
-  transition: color .2s, background .2s, border-color .2s, transform .15s;
+  transition: color .2s, background .2s, border-color .2s;
 }
 
 .help-tip__icon { display: block; width: 20px; height: 20px; flex-shrink: 0; overflow: visible; }
@@ -281,7 +296,7 @@ html,body {
 }
 .help-tip__link:hover { color: #a5b4fc; }
 
-/* ——— Search form ——— */
+/* ── Search form ── */
 
 .search-form { display: flex; flex-direction: column; gap: 28px; }
 
@@ -321,7 +336,7 @@ html,body {
   font-weight: 500;
   cursor: pointer;
   user-select: none;
-  transition: color .2s, background .2s, border-color .2s, transform .15s, box-shadow .2s;
+  transition: color .2s, background .2s, border-color .2s, box-shadow .2s;
 }
 .tag-select__pill:hover { color: var(--text); background: rgba(255,255,255,.08); border-color: rgba(99,102,241,.3); }
 .tag-select__input:focus-visible + .tag-select__pill { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -331,11 +346,10 @@ html,body {
   background: linear-gradient(135deg,rgba(99,102,241,.25),rgba(139,92,246,.15));
   box-shadow: 0 4px 20px rgba(99,102,241,.2);
 }
-.tag-select__input:checked + .tag-select__pill:hover { box-shadow: 0 6px 24px rgba(99,102,241,.28); }
 
 .search-actions { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 4px; }
 
-/* ——— Responsive ——— */
+/* ── Responsive ── */
 
 @media (max-width: 720px) {
   .app { grid-template-columns: 1fr; }

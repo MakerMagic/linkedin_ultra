@@ -1,10 +1,9 @@
 /**
- * background.js — Service Worker LinkedIn CRM.
+ * background.js — LinkedIn CRM v0.5
  *
- * Новое в v0.4:
- *   Обрабатывает запрос ENSURE_CONTENT_SCRIPT от Dashboard:
- *   1. Пингует content.js на вкладке LinkedIn
- *   2. Если не отвечает — инжектирует заново через chrome.scripting
+ * Главное изменение:
+ *   При получении CONTENT_READY → автоматически ставим команду 'start'.
+ *   Пользователю не нужно нажимать кнопку — синхронизация начинается сама.
  */
 
 const LINKEDIN_CONNECTIONS_URL = 'https://www.linkedin.com/mynetwork/invite-connect/connections/';
@@ -14,53 +13,78 @@ const LINKEDIN_CONNECTIONS_PATTERNS = [
 ];
 const DASHBOARD_PATH = 'dashboard.html';
 
-// ——— Управление вкладками ———
+// ─── Управление вкладками ──────────────────────────────────────────────────
 
-async function ensureConnectionsTab(trigger) {
+async function ensureConnectionsTab() {
   try {
     const existing = await chrome.tabs.query({ url: LINKEDIN_CONNECTIONS_PATTERNS });
     if (existing.length > 0) {
-      // Оставляем первую, закрываем дубликаты
-      const dups = existing.slice(1).map(t => t.id).filter(id => typeof id === 'number');
+      const dups = existing.slice(1).map(t => t.id).filter(Boolean);
       if (dups.length) await chrome.tabs.remove(dups);
       return existing[0].id;
     }
     const tab = await chrome.tabs.create({ url: LINKEDIN_CONNECTIONS_URL, active: false });
     return tab.id;
   } catch (err) {
-    console.error(`[CRM BG] ${trigger} — ошибка открытия вкладки Connections:`, err);
+    console.error('[CRM BG] ensureConnectionsTab:', err);
     return null;
   }
 }
 
-async function ensureDashboardTabActive(trigger) {
+async function ensureDashboardTabActive() {
   try {
     const pageUrl = chrome.runtime.getURL(DASHBOARD_PATH);
-    const found = await chrome.tabs.query({ url: pageUrl + '*' });
+    const found   = await chrome.tabs.query({ url: pageUrl + '*' });
     if (found.length > 0) {
-      const primary = found[0];
-      const dups = found.slice(1).map(t => t.id).filter(id => typeof id === 'number');
+      const dups = found.slice(1).map(t => t.id).filter(Boolean);
       if (dups.length) await chrome.tabs.remove(dups);
-      if (primary.windowId !== chrome.windows.WINDOW_ID_NONE) {
-        await chrome.windows.update(primary.windowId, { focused: true });
-      }
-      if (typeof primary.id === 'number') await chrome.tabs.update(primary.id, { active: true });
+      const tab = found[0];
+      if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true });
+      if (tab.id)       await chrome.tabs.update(tab.id, { active: true });
       return;
     }
     await chrome.tabs.create({ url: pageUrl, active: true });
   } catch (err) {
-    console.error(`[CRM BG] ${trigger} — ошибка открытия Dashboard:`, err);
+    console.error('[CRM BG] ensureDashboardTabActive:', err);
   }
 }
 
-// ——— Запросы от Dashboard ———
+// ─── Обработчик сообщений ──────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   /**
-   * ENSURE_CONTENT_SCRIPT:
-   * Dashboard вызывает это перед командой START.
-   * Гарантирует что content.js жив на вкладке LinkedIn.
+   * CONTENT_READY: content.js загрузился на LinkedIn.
+   * Автоматически запускаем синхронизацию — пишем команду в storage.
+   * content.js слушает storage.onChanged и начинает runSync().
+   */
+  if (msg.type === 'CONTENT_READY') {
+    console.log('[CRM BG] CONTENT_READY от tab', sender.tab?.id);
+
+    // Проверяем: не идёт ли синхронизация уже
+    chrome.storage.local.get(['crm_sync_status', 'crm_sync_command'], data => {
+      const alreadyRunning =
+        data.crm_sync_status  === 'running' ||
+        data.crm_sync_command === 'start';
+
+      if (!alreadyRunning) {
+        console.log('[CRM BG] Автозапуск синхронизации');
+        chrome.storage.local.set({
+          crm_sync_command: 'start',
+          crm_sync_status:  'running'
+        });
+      } else {
+        console.log('[CRM BG] Синхронизация уже идёт или запущена');
+      }
+    });
+
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  /**
+   * ENSURE_CONTENT_SCRIPT: Dashboard запрашивает проверку/инжекцию content.js.
+   * Используется кнопкой «Начать» как fallback.
    */
   if (msg.type === 'ENSURE_CONTENT_SCRIPT') {
     (async () => {
@@ -68,58 +92,63 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const tabs = await chrome.tabs.query({ url: LINKEDIN_CONNECTIONS_PATTERNS });
 
         if (tabs.length === 0) {
-          // Вкладки нет — создаём и возвращаем статус
-          const tabId = await ensureConnectionsTab('ensure_cs');
+          const tabId = await ensureConnectionsTab();
           if (!tabId) {
             sendResponse({ ok: false, reason: 'could_not_open_tab' });
             return;
           }
-          // Даём вкладке загрузиться (content_scripts авто-инжектится)
-          await new Promise(r => setTimeout(r, 3000));
+          // Ждём загрузки страницы
+          await new Promise(r => setTimeout(r, 3500));
           sendResponse({ ok: true, created: true });
           return;
         }
 
         const tabId = tabs[0].id;
 
-        // Пингуем content script
+        // Пингуем content.js
         try {
           const pong = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
-          if (pong && pong.alive) {
+          if (pong?.alive) {
             sendResponse({ ok: true, alive: true });
             return;
           }
-        } catch {
-          // content.js не ответил — инжектируем вручную
-        }
+        } catch { /* не ответил — инжектируем */ }
 
         // Программный инжект (fallback для SPA-навигации)
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          files: ['content.js']
-        });
-
+        await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
         sendResponse({ ok: true, injected: true });
+
       } catch (err) {
-        console.error('[CRM BG] ENSURE_CONTENT_SCRIPT ошибка:', err);
+        console.error('[CRM BG] ENSURE_CONTENT_SCRIPT:', err);
         sendResponse({ ok: false, reason: err.message });
       }
     })();
-    return true; // async sendResponse
+    return true;
   }
 
 });
 
-// ——— Lifecycle ———
+// ─── Lifecycle ─────────────────────────────────────────────────────────────
 
+// Клик по иконке → открываем LinkedIn + dashboard
 chrome.action.onClicked.addListener(() => {
   void (async () => {
-    await ensureConnectionsTab('action_click');
-    await ensureDashboardTabActive('action_click');
+    await ensureConnectionsTab();
+    await ensureDashboardTabActive();
   })();
 });
 
-void (async () => { await ensureConnectionsTab('service_worker_boot'); })();
+// При старте SW сбрасываем зависший running статус
+chrome.storage.local.get(['crm_sync_status'], data => {
+  if (data.crm_sync_status === 'running') {
+    // SW перезапустился — content.js уже мёртв, сбрасываем
+    chrome.storage.local.set({
+      crm_sync_status:  'idle',
+      crm_sync_command: null
+    });
+  }
+});
 
-chrome.runtime.onStartup.addListener(() => { void ensureConnectionsTab('onStartup'); });
-chrome.runtime.onInstalled.addListener(() => { void ensureConnectionsTab('onInstalled'); });
+void ensureConnectionsTab().catch(() => {});
+chrome.runtime.onStartup.addListener(() => void ensureConnectionsTab().catch(() => {}));
+chrome.runtime.onInstalled.addListener(() => void ensureConnectionsTab().catch(() => {}));

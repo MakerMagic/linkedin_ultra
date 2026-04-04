@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn CRM",
-  "description": "LinkedIn CRM — инкрементальный сбор контактов.",
-  "version": "0.4.0",
+  "description": "LinkedIn CRM — автоматический сбор контактов из LinkedIn Connections.",
+  "version": "0.5.0",
   "icons": {
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
@@ -12,9 +12,6 @@
   },
   "permissions": ["tabs", "notifications", "storage", "scripting"],
   "host_permissions": ["https://www.linkedin.com/*"],
-  "action": {
-    "default_title": "Открыть LinkedIn CRM"
-  },
   "content_scripts": [
     {
       "matches": [
@@ -24,5 +21,8 @@
       "js": ["content.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "action": {
+    "default_title": "Открыть LinkedIn CRM"
+  }
 }
