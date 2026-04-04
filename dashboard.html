@@ -105,18 +105,22 @@
             </div>
             <div class="help-tip" id="searchHelpTip">
               <button type="button" class="help-tip__btn" aria-label="Справка по поиску" title="Справка">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <!-- Тот же стиль что и остальные иконки (24×24 viewBox); размер задаётся в CSS, overflow не режет stroke -->
+                <svg class="help-tip__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
                   <path d="M12 17h.01" />
                 </svg>
               </button>
-              <div class="help-tip__popover" role="tooltip">
-                <p class="help-tip__text">
-                  Включи
-                  <button type="button" class="help-tip__link" data-go-sync>синхронизацию</button>
-                  для улучшения результатов
-                </p>
+              <!-- Невидимый padding сверху = «мост» для курсора между кнопкой и тултипом -->
+              <div class="help-tip__dropdown">
+                <div class="help-tip__popover" role="tooltip">
+                  <p class="help-tip__text">
+                    Включи
+                    <button type="button" class="help-tip__link" data-go-sync>синхронизацию</button>
+                    для улучшения результатов
+                  </p>
+                </div>
               </div>
             </div>
           </header>
@@ -137,11 +141,11 @@
                 <span class="field__hint">Позже эту строку можно заменить на AI-интерпретацию без смены остальной структуры.</span>
               </label>
 
-              <fieldset class="industry-fieldset">
-                <legend class="field__label">Отрасли</legend>
-                <p class="field__hint industry-fieldset__hint">Можно выбрать несколько</p>
-                <div class="tag-select" id="industryTags" role="group" aria-label="Отрасли для фильтра"></div>
-              </fieldset>
+              <div class="field industry-field" role="group" aria-labelledby="industry-field-label">
+                <span class="field__label" id="industry-field-label">Отрасли</span>
+                <p class="field__hint industry-field__hint" id="industry-field-hint">Можно выбрать несколько</p>
+                <div class="tag-select" id="industryTags" role="group" aria-label="Отрасли для фильтра" aria-describedby="industry-field-hint"></div>
+              </div>
 
               <div class="search-actions">
                 <button type="button" id="btnSearch" class="btn btn--primary">Найти</button>

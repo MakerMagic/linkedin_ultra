@@ -351,7 +351,17 @@ body {
   background: rgba(255, 255, 255, 0.06);
   color: var(--muted);
   cursor: pointer;
+  overflow: visible; /* иначе обводка SVG обрезается у краёв кнопки */
   transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+/* Единый масштаб с иконками навигации; stroke не клипится */
+.help-tip__icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  overflow: visible;
 }
 
 .help-tip__btn:hover {
@@ -365,21 +375,29 @@ body {
   outline-offset: 2px;
 }
 
-.help-tip__popover {
+/* Область под кнопкой: padding-top создаёт непрерывную зону наведения до тултипа */
+.help-tip__dropdown {
   position: absolute;
   z-index: 20;
-  top: calc(100% + 8px);
+  top: 100%;
   right: 0;
+  padding-top: 10px;
   width: max-content;
-  max-width: min(280px, 90vw);
-  padding: 12px 14px;
+  max-width: min(300px, 92vw);
+}
+
+.help-tip__popover {
+  position: relative;
+  width: max-content;
+  max-width: min(300px, 92vw);
+  padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(18, 26, 43, 0.95);
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--text);
   opacity: 0;
   visibility: hidden;
@@ -470,14 +488,13 @@ body {
   line-height: 1.45;
 }
 
-.industry-fieldset {
-  margin: 0;
-  padding: 0;
-  border: none;
+/* Как у блока «Ключевые слова»: без legend — одинаковый отступ слева у заголовка и подсказки */
+.industry-field {
+  gap: 10px;
 }
 
-.industry-fieldset__hint {
-  margin: -4px 0 0;
+.industry-field__hint {
+  margin: 0;
 }
 
 .tag-select {
