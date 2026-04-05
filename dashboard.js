@@ -1,7 +1,9 @@
 /**
- * dashboard.js — LinkedIn CRM v0.6
- * Единственное изменение относительно v0.5:
- *   Счётчик теперь показывает "Собрано: 234 / 500" если total известен.
+ * dashboard.js — LinkedIn CRM v1.0
+ *
+ * Изменение относительно v0.6:
+ *   applyState читает crm_sync_label и показывает его как счётчик.
+ *   Примеры: "Собрано 347 из 1234" / "Собрано 85"
  */
 (function () {
   'use strict';
@@ -9,7 +11,7 @@
   const CIRCUMFERENCE      = 2 * Math.PI * 52;
   const HEARTBEAT_STALE_MS = 15_000;
 
-  // ── DOM ────────────────────────────────────────────────────────────────────
+  // ── DOM ───────────────────────────────────────────────────────────────────
   const navButtons = document.querySelectorAll('.nav__item[data-nav]:not([disabled])');
   const panels     = document.querySelectorAll('.main-panel[data-panel]');
 
@@ -61,10 +63,18 @@
   }
 
   // =====================================================================
-  // ПРИМЕНЕНИЕ СОСТОЯНИЯ К UI
+  // ПРИМЕНЕНИЕ СОСТОЯНИЯ
   // =====================================================================
 
-  function applyState(status, phase, count, percent, total) {
+  /**
+   * @param {'idle'|'running'|'done'|'stopped'|'error'} status
+   * @param {string} phase
+   * @param {number} count
+   * @param {number} percent
+   * @param {number|null} total
+   * @param {string} label  — строка "Собрано X из Y" от content.js
+   */
+  function applyState(status, phase, count, percent, total, label) {
     const running     = status === 'running';
     const hasContacts = count > 0;
 
@@ -72,26 +82,38 @@
     if (btnStop)  btnStop.disabled  = !running;
     if (btnCSV)   btnCSV.disabled   = !hasContacts;
 
-    // Счётчик: "234" или "234 / 500"
+    // ── Счётчик контактов ──
+    // Приоритет: label от content.js ("Собрано 347 из 1234")
+    // Fallback: генерируем локально
     if (countEl) {
-      countEl.textContent = (total && total > 0)
-        ? `${count} / ${total}`
-        : String(count);
+      if (label) {
+        countEl.textContent = label;
+      } else if (total && total > 0) {
+        countEl.textContent = `${count} / ${total}`;
+      } else {
+        countEl.textContent = String(count);
+      }
     }
 
-    // Статус
+    // ── Статус ──
     let statusText;
     if (status === 'running') {
       statusText = phase === 'collecting' ? 'Сбор контактов…' : 'Скроллинг страницы…';
     } else {
-      statusText = { idle: 'Ожидание запуска', done: 'Завершено ✓', stopped: 'Остановлено', error: 'Ошибка' }[status] || 'Ожидание запуска';
+      const labels = {
+        idle:    'Ожидание запуска',
+        done:    'Завершено ✓',
+        stopped: 'Остановлено',
+        error:   'Ошибка — смотри консоль LinkedIn'
+      };
+      statusText = labels[status] || 'Ожидание запуска';
     }
     if (statusEl) statusEl.textContent = statusText;
 
-    // Кольцо
+    // ── Кольцо ──
     setRingProgress(status === 'idle' ? 0 : percent);
 
-    // Текст кнопки «Начать»
+    // ── Текст кнопки «Начать» ──
     if (btnStart) {
       btnStart.textContent =
         hasContacts && !running && status === 'stopped'
@@ -101,49 +123,59 @@
   }
 
   // =====================================================================
-  // ИНИЦИАЛИЗАЦИЯ — читаем storage + heartbeat-проверка
+  // ИНИЦИАЛИЗАЦИЯ
   // =====================================================================
+
+  const STORAGE_KEYS = [
+    'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
+    'crm_sync_percent', 'crm_sync_total', 'crm_sync_heartbeat',
+    'crm_sync_label'
+  ];
+
+  // Алиас: heartbeat может быть записан как crm_heartbeat (content.js) или crm_sync_heartbeat
+  const ALL_KEYS = [...STORAGE_KEYS, 'crm_heartbeat'];
 
   async function loadAndApplyState() {
     return new Promise(resolve => {
-      chrome.storage.local.get(
-        ['crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
-         'crm_sync_percent', 'crm_sync_total', 'crm_heartbeat'],
-        data => {
-          let status  = data.crm_sync_status  || 'idle';
-          const phase   = data.crm_sync_phase   || '';
-          const count   = data.crm_sync_count   || 0;
-          const percent = data.crm_sync_percent  || 0;
-          const total   = data.crm_sync_total    || null;
-          const hb      = data.crm_heartbeat    || 0;
+      chrome.storage.local.get(ALL_KEYS, data => {
+        let status  = data.crm_sync_status  || 'idle';
+        const phase   = data.crm_sync_phase   || '';
+        const count   = data.crm_sync_count   || 0;
+        const percent = data.crm_sync_percent  || 0;
+        const total   = data.crm_sync_total    || null;
+        const label   = data.crm_sync_label    || '';
+        const hb      = data.crm_heartbeat    || 0;
 
-          // Зависший running → сбрасываем
-          if (status === 'running' && Date.now() - hb > HEARTBEAT_STALE_MS) {
-            status = 'idle';
-            chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
-          }
-
-          applyState(status, phase, count, percent, total);
-          resolve();
+        // Зависший running → сбрасываем
+        if (status === 'running' && Date.now() - hb > HEARTBEAT_STALE_MS) {
+          status = 'idle';
+          chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
         }
-      );
+
+        applyState(status, phase, count, percent, total, label);
+        resolve();
+      });
     });
   }
 
   void loadAndApplyState();
 
-  // Live-обновления
+  // Live-обновления от content.js
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    const keys = ['crm_sync_status', 'crm_sync_phase', 'crm_sync_count', 'crm_sync_percent', 'crm_sync_total'];
-    if (!keys.some(k => k in changes)) return;
+    const relevant = [
+      'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
+      'crm_sync_percent', 'crm_sync_total', 'crm_sync_label'
+    ];
+    if (!relevant.some(k => k in changes)) return;
 
-    chrome.storage.local.get(keys, data => applyState(
+    chrome.storage.local.get(ALL_KEYS, data => applyState(
       data.crm_sync_status  || 'idle',
       data.crm_sync_phase   || '',
       data.crm_sync_count   || 0,
       data.crm_sync_percent || 0,
-      data.crm_sync_total   || null
+      data.crm_sync_total   || null,
+      data.crm_sync_label   || ''
     ));
   });
 
@@ -175,7 +207,6 @@
 
   if (btnStop) {
     btnStop.addEventListener('click', () => {
-      // Пишем stop — content.js увидит через onChanged и отменит токен
       chrome.storage.local.set({ crm_sync_command: 'stop' });
     });
   }
@@ -249,16 +280,13 @@
     INDUSTRY_OPTIONS.forEach(({ id, label }) => {
       const wrap = document.createElement('label');
       wrap.className = 'tag-select__item';
-
       const input = Object.assign(document.createElement('input'), {
         type: 'checkbox', className: 'tag-select__input', value: id
       });
       input.setAttribute('data-industry', id);
-
       const pill = Object.assign(document.createElement('span'), {
         className: 'tag-select__pill', textContent: label
       });
-
       wrap.append(input, pill);
       industryRoot.appendChild(wrap);
     });
@@ -275,7 +303,6 @@
         keywords: { raw: keywordsInput?.value.trim() || '', semantic: null },
         industries
       });
-      // TODO (этап 4): отправить на FastAPI
     });
   }
 

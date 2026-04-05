@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LinkedIn CRM",
   "description": "LinkedIn CRM — автоматический сбор контактов из LinkedIn Connections.",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "icons": {
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"

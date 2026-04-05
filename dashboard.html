@@ -19,7 +19,6 @@
           </span>
           <span class="nav__title">LinkedIn CRM</span>
         </div>
-
         <nav class="nav__list">
           <button type="button" class="nav__item nav__item--active" data-nav="sync" aria-current="page">
             <svg class="nav__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -47,18 +46,18 @@
 
       <main class="main">
 
-        <!-- ── Вкладка: Синхронизация ── -->
+        <!-- ── Вкладка 1: Синхронизация ── -->
         <div class="main-panel main-panel--active" data-panel="sync" id="panel-sync">
           <header class="main__header">
             <h1 class="main__h1">Синхронизация</h1>
-            <p class="main__sub">Автоматический сбор контактов из LinkedIn Connections.</p>
+            <p class="main__sub">Инкрементальный сбор контактов из LinkedIn Connections.</p>
           </header>
 
           <section class="glass card" aria-labelledby="sync-card-title">
             <h2 id="sync-card-title" class="card__title">Состояние</h2>
 
             <div class="sync-layout">
-              <!-- Прогресс-кольцо (реальный %) -->
+              <!-- Кольцо -->
               <div class="progress-ring" aria-hidden="true">
                 <svg class="progress-ring__svg" viewBox="0 0 120 120">
                   <defs>
@@ -77,44 +76,34 @@
               </div>
 
               <div class="sync-meta">
-                <!-- Статус (меняется: скролл / сбор / завершено) -->
                 <p id="syncStatus" class="sync-status">Ожидание запуска</p>
 
-                <!-- Счётчик контактов -->
                 <p class="sync-counter">
                   Найдено контактов:&nbsp;
                   <strong id="syncCount" class="sync-counter__value">0</strong>
                 </p>
 
                 <div class="sync-actions">
-                  <button type="button" id="btnStart" class="btn btn--primary">
-                    Начать синхронизацию
-                  </button>
-                  <button type="button" id="btnStop" class="btn btn--ghost" disabled>
-                    Остановить
-                  </button>
+                  <button type="button" id="btnStart" class="btn btn--primary">Начать синхронизацию</button>
+                  <button type="button" id="btnStop"  class="btn btn--ghost" disabled>Остановить</button>
                 </div>
 
                 <div class="sync-export">
                   <button type="button" id="btnDownloadCSV" class="btn btn--export" disabled>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="7 10 12 15 17 10"/>
-                      <line x1="12" y1="15" x2="12" y2="3"/>
+                      <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                     Скачать CSV
                   </button>
-                  <p class="sync-hint">
-                    Колонки: <strong>Profile URL</strong> · <strong>Full Name</strong>.
-                    Открывается в Excel без настройки кодировки.
-                  </p>
+                  <p class="sync-hint">CSV открывается в Excel. Колонки: Profile URL, Full Name.</p>
                 </div>
               </div>
             </div>
           </section>
         </div>
 
-        <!-- ── Вкладка: Поиск ── -->
+        <!-- ── Вкладка 2: Поиск ── -->
         <div class="main-panel" data-panel="search" id="panel-search">
           <header class="main__header main__header--row">
             <div class="main__header-text">
@@ -132,8 +121,7 @@
               <div class="help-tip__dropdown">
                 <div class="help-tip__popover" role="tooltip">
                   <p class="help-tip__text">
-                    Включи
-                    <button type="button" class="help-tip__link" data-go-sync>синхронизацию</button>
+                    Включи <button type="button" class="help-tip__link" data-go-sync>синхронизацию</button>
                     для улучшения результатов
                   </p>
                 </div>
@@ -146,18 +134,14 @@
             <div class="search-form">
               <label class="field">
                 <span class="field__label">Ключевые слова</span>
-                <input type="search" id="searchKeywords" class="field__input"
-                  placeholder="Имя, должность, компания…" autocomplete="off"/>
-                <span class="field__hint">AI-интерпретация — следующий этап.</span>
+                <input type="search" id="searchKeywords" class="field__input" placeholder="Имя, должность, компания…" autocomplete="off"/>
+                <span class="field__hint">AI-интерпретация будет добавлена на следующих шагах.</span>
               </label>
-
               <div class="field industry-field" role="group" aria-labelledby="industry-field-label">
                 <span class="field__label" id="industry-field-label">Отрасли</span>
                 <p class="field__hint" id="industry-field-hint">Можно выбрать несколько</p>
-                <div class="tag-select" id="industryTags"
-                  aria-label="Отрасли" aria-describedby="industry-field-hint"></div>
+                <div class="tag-select" id="industryTags" aria-label="Отрасли" aria-describedby="industry-field-hint"></div>
               </div>
-
               <div class="search-actions">
                 <button type="button" id="btnSearch" class="btn btn--primary">Найти</button>
               </div>
