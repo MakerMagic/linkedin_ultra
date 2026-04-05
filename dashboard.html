@@ -78,10 +78,8 @@
               <div class="sync-meta">
                 <p id="syncStatus" class="sync-status">Ожидание запуска</p>
 
-                <p class="sync-counter">
-                  Найдено контактов:&nbsp;
-                  <strong id="syncCount" class="sync-counter__value">0</strong>
-                </p>
+                <!-- FIX 1: Убран префикс "Найдено контактов:" — label приходит целиком из content.js -->
+                <p id="syncCount" class="sync-counter__value">0</p>
 
                 <div class="sync-actions">
                   <button type="button" id="btnStart" class="btn btn--primary">Начать синхронизацию</button>

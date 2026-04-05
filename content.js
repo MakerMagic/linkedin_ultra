@@ -1,12 +1,12 @@
 /**
- * content.js — LinkedIn CRM v1.0
+ * content.js — LinkedIn CRM v1.1
  *
- * Исправлено:
- *   1. performScroll: скроллит DOM-контейнер (scrollTop), а не window
- *      → работает в фоновой вкладке
- *   2. getTotalFromHeader: ищет по componentKey атрибуту — стабильно
- *   3. pollForTotal: polling каждые 500мс без жёсткого таймаута
- *   4. reportProgress: добавлен crm_sync_label "Собрано X из Y"
+ * Изменения:
+ *   1. findScrollContainer — ищет overflow:auto/scroll через getComputedStyle,
+ *      поднимаясь вверх от реального DOM-элемента контакта.
+ *      Это гарантирует скролл в фоновой вкладке.
+ *   2. Паузы уменьшены в 2 раза (быстрее сбор).
+ *   3. Всё остальное без изменений.
  */
 (function () {
   'use strict';
@@ -16,14 +16,14 @@
   // =====================================================================
 
   const CFG = {
-    scrollPxMin:        300,
-    scrollPxMax:        700,
-    pauseAfterScroll:   1500,
-    pauseJitter:        1500,
-    waitNewCardsMs:     5000,   // ждём новые карточки после скролла
-    pollTotalMs:        500,    // интервал polling total
-    confirmScrolls:     2,      // доп. скроллов после collected >= total
-    maxEmptyCyclesFB:   8,      // стоп без total
+    scrollPxMin:        400,   // (было 300)
+    scrollPxMax:        900,   // (было 700) — больший шаг, меньше итераций
+    pauseAfterScroll:   700,   // (было 1500) — быстрее
+    pauseJitter:        600,   // (было 1500) — быстрее
+    waitNewCardsMs:     3000,  // (было 5000) — меньше ждём
+    pollTotalMs:        500,
+    confirmScrolls:     2,
+    maxEmptyCyclesFB:   8,
     heartbeatInterval:  4000
   };
 
@@ -57,10 +57,13 @@
   // ГЛОБАЛЬНОЕ СОСТОЯНИЕ
   // =====================================================================
 
-  let isRunning    = false;
-  let currentToken = null;
+  let isRunning      = false;
+  let currentToken   = null;
   let heartbeatTimer = null;
-  let seenUrls     = new Set();
+  let seenUrls       = new Set();
+
+  // Кэшируем найденный контейнер — не ищем каждый раз
+  let _cachedScrollContainer = null;
 
   // =====================================================================
   // УТИЛИТЫ
@@ -97,86 +100,108 @@
   }
 
   // =====================================================================
-  // 🔧 FIX 1: СКРОЛЛ КОНТЕЙНЕРА (работает в фоновой вкладке)
+  // FIX 2: НАДЁЖНЫЙ ПОИСК СКРОЛЛ-КОНТЕЙНЕРА
   // =====================================================================
 
   /**
-   * Находит реально прокручиваемый DOM-контейнер.
+   * Стратегия поиска прокручиваемого контейнера:
    *
-   * Принцип: ищем элемент у которого scrollHeight > clientHeight + 50px.
-   * Это означает что внутри есть контент для скролла.
+   * 1. Берём реальную карточку контакта из DOM (a[href*="/in/"])
+   * 2. Поднимаемся по parentElement вверх
+   * 3. Проверяем через getComputedStyle — ищем overflow-y: auto | scroll
+   *    И scrollHeight > clientHeight + 100 (реально есть что скроллить)
+   * 4. Fallback: document.body, потом document.documentElement
    *
-   * Важно: скроллим element.scrollTop — это работает в неактивных вкладках.
-   * window.scrollBy({ behavior: 'smooth' }) Chrome замораживает в фоне.
+   * Почему так:
+   *   LinkedIn может переименовать классы, но overflow CSS — неизменяем.
+   *   getComputedStyle работает в любой вкладке (активной и фоновой).
+   *   element.scrollTop += N работает в фоновой вкладке — в отличие от
+   *   window.scrollBy({ behavior: 'smooth' }).
    */
   function findScrollContainer() {
-    // Приоритетные кандидаты — специфичные для LinkedIn
-    const candidates = [
-      // Основной контейнер скаффолдинга
-      document.querySelector('.scaffold-layout__main'),
-      document.querySelector('.scaffold-finite-scroll__content'),
-      document.querySelector('.mn-connections__list'),
-      document.querySelector('[data-view-name="connections-list"]'),
-      // Общие fallback
-      document.querySelector('main'),
-      document.querySelector('#main'),
-      document.documentElement  // <html> — всегда прокручиваем как последний resort
-    ];
+    // Используем кэш — не ищем каждую итерацию
+    if (_cachedScrollContainer && document.contains(_cachedScrollContainer)) {
+      return _cachedScrollContainer;
+    }
 
-    for (const el of candidates) {
-      if (!el) continue;
-      // Проверяем что элемент реально прокручивается
-      if (el === document.documentElement) return el; // последний fallback всегда
-      if (el.scrollHeight > el.clientHeight + 50) {
-        console.log(`[CRM] Контейнер скролла: ${el.tagName}.${el.className.split(' ')[0]}`);
-        return el;
+    // Стартуем от первой карточки контакта
+    const anchor = document.querySelector('a[href*="/in/"]');
+
+    if (anchor) {
+      let el = anchor.parentElement;
+      let depth = 0;
+
+      while (el && el !== document.documentElement && depth < 20) {
+        const style    = window.getComputedStyle(el);
+        const overflowY = style.overflowY;
+
+        if (
+          (overflowY === 'auto' || overflowY === 'scroll') &&
+          el.scrollHeight > el.clientHeight + 100
+        ) {
+          console.log(
+            `[CRM] 📌 Контейнер скролла (depth=${depth}):`,
+            el.tagName,
+            el.id ? `#${el.id}` : '',
+            el.className ? `.${el.className.trim().split(/\s+/)[0]}` : ''
+          );
+          _cachedScrollContainer = el;
+          return el;
+        }
+
+        el = el.parentElement;
+        depth++;
       }
     }
 
+    // Fallback 1: document.body прокручивается?
+    if (document.body.scrollHeight > document.body.clientHeight + 100) {
+      const style = window.getComputedStyle(document.body);
+      if (style.overflowY !== 'hidden') {
+        console.log('[CRM] 📌 Контейнер скролла: document.body (fallback)');
+        _cachedScrollContainer = document.body;
+        return document.body;
+      }
+    }
+
+    // Fallback 2: documentElement (html)
+    console.log('[CRM] 📌 Контейнер скролла: document.documentElement (last resort)');
+    _cachedScrollContainer = document.documentElement;
     return document.documentElement;
   }
 
   /**
-   * Скроллит контейнер на px вниз.
+   * Скроллит найденный контейнер вниз на px.
    *
-   * Не используем behavior: 'smooth' — Chrome приостанавливает анимацию
-   * в неактивных вкладках и scrollBy не работает совсем.
-   * scrollTop += работает всегда, в любой вкладке.
+   * element.scrollTop += N работает в фоновой (неактивной) вкладке.
+   * window.scrollBy({ behavior: 'smooth' }) — не работает в фоне.
    */
   function performScroll(px) {
     const container = findScrollContainer();
+    const before    = container.scrollTop;
 
-    const before = container.scrollTop;
     container.scrollTop += px;
+
     const after = container.scrollTop;
 
-    // Если контейнер не двигается — пробуем window через scrollY
-    if (after === before && container !== document.documentElement) {
-      document.documentElement.scrollTop += px;
+    // Если scrollTop не изменился — контейнер уже в конце или неверный
+    // Сбрасываем кэш и пробуем ещё раз с другим контейнером
+    if (after === before && before > 0) {
+      console.log('[CRM] ⚠️ scrollTop не изменился — кэш сброшен');
+      _cachedScrollContainer = null;
     }
 
     console.log(
       `[CRM] Скролл +${px}px | scrollTop: ${Math.round(before)}→${Math.round(after)}` +
-      ` | docH=${document.body.scrollHeight}`
+      ` | bodyH=${document.body.scrollHeight}`
     );
   }
 
   // =====================================================================
-  // 🔧 FIX 2: ПАРСИНГ TOTAL ПО componentKey
+  // ПАРСИНГ TOTAL ПО componentKey
   // =====================================================================
 
-  /**
-   * Ищет элемент с общим количеством контактов.
-   *
-   * LinkedIn рендерит счётчик в шапке списка:
-   *   <div componentKey="ConnectionsPage_ConnectionsListHeader">
-   *     <p>1,234</p>   ← или "1 234 connections"
-   *   </div>
-   *
-   * Атрибут componentKey стабилен — LinkedIn не меняет его при рефакторинге CSS.
-   */
   function getTotalFromHeader() {
-    // Первый приоритет — componentKey (самый надёжный)
     const header = document.querySelector(
       '[componentKey="ConnectionsPage_ConnectionsListHeader"]'
     );
@@ -184,106 +209,60 @@
     if (header) {
       const p = header.querySelector('p');
       if (p) {
-        const text = (p.textContent || '').trim();
-        const num  = parseConnectionCount(text);
+        const num = parseConnectionCount((p.textContent || '').trim());
         if (num) {
-          console.log(`[CRM] ✅ Total (componentKey): ${num} | текст: "${text}"`);
+          console.log(`[CRM] ✅ Total (componentKey): ${num}`);
           return num;
         }
       }
-
-      // Fallback внутри header: любой текстовый узел с числом
-      const allText = (header.textContent || '').trim();
-      const num = parseConnectionCount(allText);
+      const num = parseConnectionCount((header.textContent || '').trim());
       if (num) {
-        console.log(`[CRM] ✅ Total (header textContent): ${num}`);
+        console.log(`[CRM] ✅ Total (header text): ${num}`);
         return num;
       }
     }
 
-    // Второй приоритет — заголовок страницы h1 в main (не в nav)
-    const mainEl = document.querySelector('main');
-    if (mainEl) {
-      const h1 = mainEl.querySelector('h1');
-      if (h1) {
-        const num = parseConnectionCount(h1.textContent || '');
-        if (num) {
-          console.log(`[CRM] ✅ Total (main h1): ${num}`);
-          return num;
-        }
+    // Fallback: h1 в main
+    const h1 = document.querySelector('main h1');
+    if (h1) {
+      const num = parseConnectionCount(h1.textContent || '');
+      if (num) {
+        console.log(`[CRM] ✅ Total (main h1): ${num}`);
+        return num;
       }
     }
 
     return null;
   }
 
-  /**
-   * Парсит число из строк вида:
-   *   "1,234"  "1 234"  "500+"  "1234 connections"  "1,234 контакта"
-   *
-   * Исключает: "mutual connections", "shared connections" — это общие знакомые.
-   */
   function parseConnectionCount(text) {
     if (!text || text.length > 100) return null;
-
-    // Исключаем строки об общих знакомых
     if (/mutual|shared|common|взаимн|общ(их|ий|ее)/i.test(text)) return null;
-
-    // Убираем слова-суффиксы и парсим число
     const cleaned = text
       .replace(/connections?|connexions?|контакт[аов]*/gi, '')
       .replace(/\+/g, '')
       .trim();
-
-    // Находим первое число (поддерживаем запятые и пробелы как разделители тысяч)
     const m = cleaned.match(/(\d[\d,\s]*\d|\d)/);
     if (!m) return null;
-
     const num = parseInt(m[1].replace(/[\s,]/g, ''), 10);
     if (!num || num < 1 || num > 30000) return null;
-
     return num;
   }
 
-  // =====================================================================
-  // 🔧 FIX 3: POLLING TOTAL (без жёсткого таймаута)
-  // =====================================================================
-
-  /**
-   * Polling каждые 500мс пока:
-   *   - total не найден
-   *   - И token не отменён
-   *
-   * Не выбрасывает ошибку по таймауту — просто ждёт бесконечно.
-   * Цикл сам продолжает работу даже если total не найден (fallback по emptyCycles).
-   *
-   * @returns {Promise<number|null>} — число или null если отменили
-   */
   function pollForTotal(token) {
-    return new Promise((resolve) => {
-      // Уже есть?
+    return new Promise(resolve => {
       const immediate = getTotalFromHeader();
       if (immediate) { resolve(immediate); return; }
-
       const interval = setInterval(() => {
-        if (token.cancelled) {
-          clearInterval(interval);
-          resolve(null);
-          return;
-        }
-
+        if (token.cancelled) { clearInterval(interval); resolve(null); return; }
         const found = getTotalFromHeader();
-        if (found) {
-          clearInterval(interval);
-          console.log(`[CRM] pollForTotal → нашли ${found}`);
-          resolve(found);
-        }
+        if (found) { clearInterval(interval); resolve(found); }
       }, CFG.pollTotalMs);
     });
   }
 
   // =====================================================================
-  // ПОИСК ССЫЛОК НА ПРОФИЛИ
+  // ПОИСК ССЫЛОК И ИЗВЛЕЧЕНИЕ КОНТАКТОВ
   // =====================================================================
 
   function findProfileLinks() {
@@ -291,16 +270,11 @@
     for (const a of document.querySelectorAll('a[href*="/in/"]')) {
       const href = a.getAttribute('href') || '';
       if (!href.match(/\/in\/[^/?#]{2,}/)) continue;
-      // Исключаем навигационные зоны
       if (a.closest('header, .global-nav, [role="navigation"], #global-nav')) continue;
       links.push(a);
     }
     return links;
   }
-
-  // =====================================================================
-  // ИЗВЛЕЧЕНИЕ КОНТАКТА
-  // =====================================================================
 
   function extractContact(link) {
     const profileUrl = normalizeProfileUrl(link.getAttribute('href'));
@@ -308,27 +282,21 @@
 
     let fullName = null;
 
-    // 1. aria-label ("View John Doe's profile")
     fullName = nameFromAriaLabel(link.getAttribute('aria-label'));
 
-    // 2. Дочерний span с именем
     if (!fullName) {
       const el = link.querySelector('[class*="name"], [class*="title-text"], [class*="person-name"]');
       if (el) fullName = cleanText(el);
     }
 
-    // 3. Родительская карточка
     if (!fullName) {
       const card = link.closest('li, [class*="card"], [class*="result"], [class*="entity"]');
       if (card) {
-        const el = card.querySelector(
-          '[class*="name"], [class*="title-text"], .artdeco-entity-lockup__title'
-        );
+        const el = card.querySelector('[class*="name"], [class*="title-text"], .artdeco-entity-lockup__title');
         if (el) fullName = cleanText(el);
       }
     }
 
-    // 4. img[alt] с именем в аватаре
     if (!fullName) {
       const card = link.closest('li, [class*="card"]');
       if (card) {
@@ -337,7 +305,6 @@
       }
     }
 
-    // 5. Текст самой ссылки
     if (!fullName) fullName = cleanText(link);
 
     if (!fullName || fullName.length < 2) return null;
@@ -345,10 +312,6 @@
 
     return { profileUrl, fullName };
   }
-
-  // =====================================================================
-  // ИНКРЕМЕНТАЛЬНЫЙ СБОР
-  // =====================================================================
 
   function harvestNewContacts() {
     const fresh = [];
@@ -363,7 +326,7 @@
   }
 
   // =====================================================================
-  // ОЖИДАНИЕ НОВЫХ КАРТОЧЕК (MutationObserver)
+  // ОЖИДАНИЕ НОВЫХ КАРТОЧЕК
   // =====================================================================
 
   function waitForNewCards(currentCount, timeoutMs, token) {
@@ -392,18 +355,9 @@
   }
 
   // =====================================================================
-  // 🔧 FIX 4: ПРОГРЕСС В STORAGE (с лейблом "Собрано X из Y")
+  // ПРОГРЕСС
   // =====================================================================
 
-  /**
-   * Сохраняет прогресс в storage.
-   * Добавляет crm_sync_label — строку для отображения в UI.
-   *
-   * @param {number} collected
-   * @param {number|null} total
-   * @param {'running'|'done'|'stopped'} phase
-   * @param {Array|null} contacts — если null, не перезаписываем
-   */
   async function reportProgress(collected, total, phase, contacts = null) {
     let percent;
 
@@ -411,14 +365,13 @@
       percent = Math.round((collected / total) * 100);
       if (phase === 'running') percent = Math.min(99, percent);
     } else {
-      // Total неизвестен — кольцо не заполняем, держим маленькое значение
       percent = collected > 0 ? Math.min(15, Math.round(collected / 10)) : 1;
     }
 
     if (phase === 'done')    percent = 100;
     if (phase === 'stopped') percent = total ? Math.min(95, percent) : Math.min(50, percent);
 
-    // Строка для UI: "Собрано 347 из 1234" или просто "Собрано 347"
+    // Строка без префикса — dashboard.html не добавляет свой префикс
     const label = total
       ? `Собрано ${collected} из ${total}`
       : `Собрано ${collected}`;
@@ -457,94 +410,84 @@
   // =====================================================================
 
   async function runSync(token) {
-    console.log('[CRM] ══ Синхронизация запущена ══');
+    console.log('[CRM] ══ Синхронизация v1.1 запущена ══');
     startHeartbeat();
+
+    // Сбрасываем кэш контейнера — страница могла поменяться
+    _cachedScrollContainer = null;
 
     let allContacts = [];
     let total       = null;
     let emptyCycles = 0;
     let confirmLeft = 0;
 
-    // Ждём первых карточек (SPA грузит асинхронно)
     if (findProfileLinks().length === 0) {
       console.log('[CRM] Ждём первых карточек...');
-      try {
-        await waitForNewCards(0, 15000, token);
-      } catch (e) {
-        if (e instanceof CancelledError) { await onStopped(allContacts, null); return; }
-      }
+      try { await waitForNewCards(0, 15000, token); }
+      catch (e) { if (e instanceof CancelledError) { await onStopped(allContacts, null); return; } }
     }
 
-    // Первый урожай + немедленная попытка найти total
+    // Первый урожай
     const firstBatch = harvestNewContacts();
     allContacts.push(...firstBatch);
     total = getTotalFromHeader();
 
-    console.log(`[CRM] Первый урожай: ${firstBatch.length}. Total: ${total ?? '(ещё не найден)'}`);
+    console.log(`[CRM] Первый урожай: ${firstBatch.length}. Total: ${total ?? '(не найден)'}`);
+
+    // Логируем найденный контейнер сразу — до первого скролла
+    findScrollContainer();
+
     await reportProgress(allContacts.length, total, 'running', allContacts);
 
-    // Если total не найден сразу — запускаем polling параллельно с циклом
-    // Polling сам запишет total когда найдёт
     if (!total) {
       pollForTotal(token).then(found => {
         if (found && !token.cancelled) {
           total = found;
-          console.log(`[CRM] Параллельный polling нашёл total: ${found}`);
+          console.log(`[CRM] Polling нашёл total: ${found}`);
         }
       });
     }
 
-    // ── Основной цикл ──
     while (true) {
       if (token.cancelled) { await onStopped(allContacts, total); return; }
 
-      // Условие остановки: собрали >= total
       if (total !== null && allContacts.length >= total) {
         if (confirmLeft < CFG.confirmScrolls) {
           confirmLeft++;
-          console.log(`[CRM] Достигнут total=${total}. Контрольный скролл ${confirmLeft}/${CFG.confirmScrolls}`);
+          console.log(`[CRM] Контрольный скролл ${confirmLeft}/${CFG.confirmScrolls}`);
         } else {
           console.log(`[CRM] ✓ Завершено: ${allContacts.length} >= ${total}`);
           break;
         }
       } else if (total === null) {
-        // Fallback: total неизвестен — останавливаемся по emptyCycles
         if (emptyCycles >= CFG.maxEmptyCyclesFB) {
-          console.log(`[CRM] Fallback-стоп: ${emptyCycles} пустых скроллов без total`);
+          console.log(`[CRM] Fallback-стоп: ${emptyCycles} пустых скроллов`);
           break;
         }
       } else {
         confirmLeft = 0;
       }
 
-      // ── Скролл (работает в фоновой вкладке) ──
       const countBefore = findProfileLinks().length;
       performScroll(randomInt(CFG.scrollPxMin, CFG.scrollPxMax));
 
-      // Ждём новые карточки через MutationObserver
       try {
         await waitForNewCards(countBefore, CFG.waitNewCardsMs, token);
       } catch (e) {
         if (e instanceof CancelledError) { await onStopped(allContacts, total); return; }
       }
 
-      // Короткая пауза — LinkedIn рендерит постепенно
       try {
         await delayOrCancel(CFG.pauseAfterScroll + randomInt(0, CFG.pauseJitter), token);
       } catch (e) {
         if (e instanceof CancelledError) { await onStopped(allContacts, total); return; }
       }
 
-      // Пробуем ещё раз найти total если ещё нет
       if (!total) {
         const found = getTotalFromHeader();
-        if (found) {
-          total = found;
-          console.log(`[CRM] ✅ Total найден в итерации: ${total}`);
-        }
+        if (found) { total = found; console.log(`[CRM] Total в итерации: ${total}`); }
       }
 
-      // Собираем новые контакты
       const batch = harvestNewContacts();
 
       if (batch.length > 0) {
@@ -555,15 +498,11 @@
         await reportProgress(allContacts.length, total, 'running', allContacts);
       } else {
         emptyCycles++;
-        console.log(
-          `[CRM] Нет новых (пустых: ${emptyCycles}` +
-          `${total ? `, осталось: ${total - allContacts.length}` : ''})`
-        );
+        console.log(`[CRM] Нет новых (${emptyCycles}${total ? `, осталось: ${total - allContacts.length}` : ''})`);
         await reportProgress(allContacts.length, total, 'running');
       }
     }
 
-    // ── Финал ──
     stopHeartbeat();
     isRunning = false;
 
@@ -578,7 +517,7 @@
       crm_sync_command: null
     });
 
-    console.log(`[CRM] ✓ Готово. Собрано: ${allContacts.length}${total ? `/${total}` : ''}`);
+    console.log(`[CRM] ✓ Готово: ${allContacts.length}${total ? `/${total}` : ''}`);
   }
 
   async function onStopped(contacts, total) {
@@ -609,12 +548,10 @@
 
   function startSync() {
     if (isRunning) { console.log('[CRM] Уже запущено'); return; }
-
-    // Сбрасываем Set — чистая сессия
-    seenUrls = new Set();
-
-    isRunning    = true;
-    currentToken = makeStopToken();
+    seenUrls             = new Set();
+    _cachedScrollContainer = null;
+    isRunning            = true;
+    currentToken         = makeStopToken();
 
     chrome.storage.local.set({
       crm_sync_status:  'running',
@@ -636,13 +573,8 @@
 
   function stopSync() {
     if (!isRunning) return;
-    console.log('[CRM] STOP → отменяем токен');
     if (currentToken) currentToken.cancelled = true;
   }
-
-  // =====================================================================
-  // КОМАНДЫ
-  // =====================================================================
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.crm_sync_command) return;
@@ -655,18 +587,14 @@
     if (msg.type === 'PING') { sendResponse({ alive: true, isRunning }); return true; }
   });
 
-  // Автостарт при загрузке
   chrome.storage.local.get(['crm_sync_command'], data => {
-    if (data.crm_sync_command === 'start') {
-      console.log('[CRM] Автостарт при загрузке');
-      startSync();
-    }
+    if (data.crm_sync_command === 'start') startSync();
   });
 
   if (chrome.runtime?.id) {
     chrome.runtime.sendMessage({ type: 'CONTENT_READY' }).catch(() => {});
   }
 
-  console.log('[CRM] content.js v1.0 готов');
+  console.log('[CRM] content.js v1.1 готов');
 
 })();
