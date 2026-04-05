@@ -1,15 +1,14 @@
 /**
- * dashboard.js — LinkedIn CRM v1.3
+ * dashboard.js — LinkedIn CRM v1.4
  *
  * Исправлено:
- *   1. Экспорт → TSV (tab-separated) вместо HTML XLS.
- *      Tab гарантированно не встречается в именах и URL,
- *      поэтому Excel открывает файл с двумя колонками на ЛЮБОЙ локали.
- *      Колонки: A = Name, B = URL (как в ТЗ — имя первым).
+ *   1. Экспорт → CSV (comma-separated) вместо TSV.
+ *      Формат: Name,URL — простой, надёжный, Excel открывает корректно.
+ *      Кавычки только если в имени есть запятая: "Doe, John",https://...
+ *      BOM (UTF-8) чтобы Excel правильно читал кириллицу.
  *
- *   2. ETA не показывается пока собрано < 10 контактов.
- *      Было: показывалось после 2 батчей (может быть < 10 контактов).
- *      Стало: проверка count >= 10 в applyState.
+ *   2. ETA — формат "~N мин" или "~N сек", не показывается пока собрано < 10.
+ *      Данные приходят от content.js через crm_sync_eta_seconds.
  */
 (function () {
   'use strict';
@@ -69,14 +68,14 @@
   // ── ETA форматирование ────────────────────────────────────────────────────
 
   /**
-   * Форматирует секунды в читаемую строку.
-   * Примеры: "менее минуты", "~3 мин", "~1 ч 12 мин"
+   * Форматирует секунды в строку вида "~N мин" или "~N сек".
+   * Возвращает null если значение некорректно.
    */
   function formatEta(seconds) {
     if (seconds === null || seconds === undefined || seconds < 0) return null;
-    if (seconds < 60)  return 'менее минуты';
+    if (seconds < 60) return `~${Math.max(1, Math.round(seconds))} сек`;
     const mins = Math.round(seconds / 60);
-    if (mins < 60)     return `~${mins} мин`;
+    if (mins < 60) return `~${mins} мин`;
     const h = Math.floor(mins / 60);
     const m = mins % 60;
     return m > 0 ? `~${h} ч ${m} мин` : `~${h} ч`;
@@ -92,7 +91,7 @@
     if (btnStop)  btnStop.disabled  = !running;
     if (btnCSV)   btnCSV.disabled   = !hasContacts;
 
-    // Счётчик: "Собрано 347 из 1234"
+    // Счётчик: "Собрано 347 из 1234" (текст приходит из content.js через label)
     if (countEl) {
       countEl.textContent = label || (total ? `${count} / ${total}` : String(count));
     }
@@ -100,12 +99,12 @@
     // ETA: показываем только если:
     //   - идёт синхронизация
     //   - total известен
-    //   - собрано >= 10 контактов (до этого данных для расчёта недостаточно)
+    //   - собрано >= 10 контактов (до этого данных недостаточно для надёжного расчёта)
     if (etaEl && etaTextEl) {
-      const showEta = running && total && count >= 10;
+      const showEta = running && total && count >= 10 && etaSeconds !== null;
       const etaStr  = showEta ? formatEta(etaSeconds) : null;
       if (etaStr) {
-        etaTextEl.textContent = `Осталось ${etaStr}`;
+        etaTextEl.textContent = `осталось ${etaStr}`;
         etaEl.hidden = false;
       } else {
         etaEl.hidden = true;
@@ -129,7 +128,7 @@
     // Кольцо
     setRingProgress(status === 'idle' ? 0 : percent);
 
-    // Текст кнопки
+    // Текст кнопки старта
     if (btnStart) {
       btnStart.textContent = (hasContacts && !running && status === 'stopped')
         ? 'Продолжить синхронизацию'
@@ -216,40 +215,47 @@
   if (btnStart) btnStart.addEventListener('click', () => void handleStart());
   if (btnStop)  btnStop.addEventListener('click', () => chrome.storage.local.set({ crm_sync_command: 'stop' }));
 
-  // ── Экспорт: TSV (Tab-Separated Values) ──────────────────────────────────
+  // ── Экспорт: CSV (Comma-Separated Values) ────────────────────────────────
   //
-  // Почему TSV, а не CSV и не XLS:
-  //   - CSV с запятой: не работает в Excel на локалях с разделителем ";"
-  //   - HTML XLS: не всегда открывается с колонками в старых версиях Excel
-  //   - TSV: символ Tab никогда не встречается в именах людей и LinkedIn URL.
-  //     Excel открывает .tsv с правильными колонками на ЛЮБОЙ локали без
-  //     дополнительных настроек. Это самый надёжный формат.
+  // Формат строго по ТЗ:
+  //   Строка 1: Name,URL  (заголовок без кавычек)
+  //   Строки данных: имя,url
+  //   Кавычки только если в имени есть запятая: "Doe, John",https://...
+  //   Сепаратор — запятая (,), не точка с запятой
+  //   BOM (0xEF 0xBB 0xBF) — Excel правильно распознаёт UTF-8
   //
-  // Колонки (порядок из ТЗ):
-  //   A = Name (полное имя)
-  //   B = URL  (ссылка на профиль)
+  // Почему не TSV:
+  //   ТЗ требует именно CSV с запятой.
+  //   Запятая в именах редка, и мы её корректно экранируем кавычками.
 
-  function downloadTSV(contacts) {
+  function downloadCSV(contacts) {
     if (!contacts?.length) return;
 
-    // Убираем табы из значений (на случай если вдруг есть в имени)
-    const clean = v => String(v ?? '').replace(/\t/g, ' ').replace(/\r?\n/g, ' ');
+    // Экранируем поле: кавычки только если внутри есть запятая
+    const escapeField = v => {
+      const s = String(v ?? '').replace(/\r?\n/g, ' ');
+      if (s.includes(',')) {
+        // Внутренние кавычки удваиваем по стандарту RFC 4180
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
 
     const lines = [
-      // Заголовок: Name\tURL
-      ['Name', 'URL'].join('\t'),
+      // Заголовок: Name,URL — без кавычек
+      'Name,URL',
       // Данные: имя первым, URL вторым
-      ...contacts.map(c => [clean(c.fullName), clean(c.profileUrl)].join('\t'))
+      ...contacts.map(c => `${escapeField(c.fullName)},${escapeField(c.profileUrl)}`)
     ];
 
-    // BOM (0xEF 0xBB 0xBF) — Excel правильно распознаёт UTF-8
+    // BOM + CRLF как требует RFC 4180 и ожидает Excel
     const content = '\uFEFF' + lines.join('\r\n');
-    const blob    = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
+    const blob    = new Blob([content], { type: 'text/csv;charset=utf-8' });
     const url     = URL.createObjectURL(blob);
 
     const a = Object.assign(document.createElement('a'), {
       href:     url,
-      download: `linkedin_contacts_${new Date().toISOString().slice(0, 10)}.tsv`,
+      download: `linkedin_contacts_${new Date().toISOString().slice(0, 10)}.csv`,
       style:    'display:none'
     });
     document.body.appendChild(a);
@@ -266,7 +272,7 @@
           alert('Нет контактов. Запустите синхронизацию.');
           return;
         }
-        downloadTSV(contacts);
+        downloadCSV(contacts);
       });
     });
   }

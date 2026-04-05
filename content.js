@@ -1,14 +1,17 @@
 /**
- * content.js — LinkedIn CRM v1.2
+ * content.js — LinkedIn CRM v1.3
  *
- * Новое:
- *   ETA (примерное время до конца) — скользящее среднее по последним 6 батчам.
- *   Пишем crm_sync_eta_seconds в storage — dashboard читает и отображает.
- *
- * Остальное без изменений относительно v1.1.
+ * Исправлено:
+ *   ETA теперь считается через константу TIME_PER_10 (секунд на каждые 10 контактов).
+ *   Убрано скользящее среднее — оно давало нестабильные значения.
+ *   Сброс таймера и счётчика при каждом старте.
  */
 (function () {
   'use strict';
+
+  // ⏱ Среднее время (в секундах) на скролл и парсинг каждых 10 контактов.
+  // Подбирается экспериментально — меняй это значение если время считается неточно.
+  const TIME_PER_10 = 5;
 
   const CFG = {
     scrollPxMin:        400,
@@ -19,8 +22,7 @@
     pollTotalMs:        500,
     confirmScrolls:     2,
     maxEmptyCyclesFB:   8,
-    heartbeatInterval:  4000,
-    etaWindowSize:      6    // сколько последних батчей используем для расчёта скорости
+    heartbeatInterval:  4000
   };
 
   // ── Stop Token ────────────────────────────────────────────────────────────
@@ -233,43 +235,20 @@
     });
   }
 
-  // ── ETA (новое) ───────────────────────────────────────────────────────────
+  // ── ETA через TIME_PER_10 ─────────────────────────────────────────────────
 
   /**
-   * Хранит последние CFG.etaWindowSize точек {ts, count}.
-   * После каждого батча добавляем точку и считаем скорость (контактов/сек).
-   * ETA = (total - collected) / скорость
+   * Рассчитывает начальное количество секунд исходя из total.
+   * Формула: Math.ceil(total / 10) * TIME_PER_10
    */
-  const timingWindow = [];
-
-  function pushTiming(count) {
-    timingWindow.push({ ts: Date.now(), count });
-    if (timingWindow.length > CFG.etaWindowSize) timingWindow.shift();
-  }
-
-  /**
-   * Возвращает ETA в секундах или null если данных недостаточно.
-   * Использует линейную регрессию по окну — устойчивее к выбросам.
-   */
-  function calcEtaSeconds(collected, total) {
-    if (!total || total <= collected) return null;
-    if (timingWindow.length < 2) return null;
-
-    const first = timingWindow[0];
-    const last  = timingWindow[timingWindow.length - 1];
-    const dCount = last.count - first.count;
-    const dTime  = (last.ts - first.ts) / 1000; // секунды
-
-    if (dCount <= 0 || dTime <= 0) return null;
-
-    const ratePerSec = dCount / dTime;                     // контакт/сек
-    const remaining  = total - collected;
-    return Math.max(0, Math.round(remaining / ratePerSec));
+  function calcInitialSeconds(total) {
+    if (!total || total <= 0) return null;
+    return Math.ceil(total / 10) * TIME_PER_10;
   }
 
   // ── Progress ──────────────────────────────────────────────────────────────
 
-  async function reportProgress(collected, total, phase, etaSeconds = null, contacts = null) {
+  async function reportProgress(collected, total, phase, remainingSeconds = null, contacts = null) {
     let percent;
     if (total && total > 0) {
       percent = Math.round((collected / total) * 100);
@@ -287,7 +266,7 @@
       crm_sync_count:       collected,
       crm_sync_total:       total,
       crm_sync_label:       label,
-      crm_sync_eta_seconds: etaSeconds,
+      crm_sync_eta_seconds: remainingSeconds !== null ? Math.max(0, remainingSeconds) : null,
       crm_sync_status:      phase === 'running' ? 'running' : phase,
       crm_sync_phase:       phase === 'running' ? 'scrolling' : phase
     };
@@ -309,15 +288,19 @@
   // ── Главный цикл ──────────────────────────────────────────────────────────
 
   async function runSync(token) {
-    console.log('[CRM] ══ Синхронизация v1.2 запущена ══');
+    console.log('[CRM] ══ Синхронизация v1.3 запущена ══');
     startHeartbeat();
     _cachedScrollContainer = null;
-    timingWindow.length = 0;
 
-    let allContacts = [];
-    let total       = null;
-    let emptyCycles = 0;
-    let confirmLeft = 0;
+    let allContacts    = [];
+    let total          = null;
+    let emptyCycles    = 0;
+    let confirmLeft    = 0;
+
+    // Оставшееся время в секундах — инициализируется когда узнаём total
+    let remainingSeconds = null;
+    // Последний пройденный порог кратный 10 (для убывания таймера)
+    let lastMilestone    = 0;
 
     if (findProfileLinks().length === 0) {
       console.log('[CRM] Ждём первых карточек...');
@@ -328,16 +311,27 @@
     const firstBatch = harvestNewContacts();
     allContacts.push(...firstBatch);
     total = getTotalFromHeader();
-    findScrollContainer(); // лог контейнера сразу
+    findScrollContainer();
 
-    if (firstBatch.length > 0) pushTiming(allContacts.length);
+    // Инициализируем таймер как только узнали total
+    if (total) {
+      remainingSeconds = calcInitialSeconds(total);
+      console.log(`[CRM] ⏱ Начальный таймер: ${remainingSeconds}с для ${total} контактов`);
+    }
 
     console.log(`[CRM] Первый урожай: ${firstBatch.length}. Total: ${total ?? '(не найден)'}`);
-    await reportProgress(allContacts.length, total, 'running', calcEtaSeconds(allContacts.length, total), allContacts);
+    await reportProgress(allContacts.length, total, 'running', remainingSeconds, allContacts);
 
     if (!total) {
       pollForTotal(token).then(found => {
-        if (found && !token.cancelled) { total = found; console.log(`[CRM] Polling total: ${found}`); }
+        if (found && !token.cancelled) {
+          total = found;
+          // Инициализируем таймер если ещё не был установлен
+          if (remainingSeconds === null) {
+            remainingSeconds = calcInitialSeconds(found);
+            console.log(`[CRM] ⏱ Polling total: ${found}, таймер: ${remainingSeconds}с`);
+          }
+        }
       });
     }
 
@@ -370,7 +364,14 @@
 
       if (!total) {
         const f = getTotalFromHeader();
-        if (f) { total = f; console.log(`[CRM] Total в итерации: ${total}`); }
+        if (f) {
+          total = f;
+          // Инициализируем таймер если ещё не был установлен
+          if (remainingSeconds === null) {
+            remainingSeconds = calcInitialSeconds(f);
+          }
+          console.log(`[CRM] Total в итерации: ${total}`);
+        }
       }
 
       const batch = harvestNewContacts();
@@ -378,17 +379,25 @@
       if (batch.length > 0) {
         allContacts.push(...batch);
         emptyCycles = 0;
-        pushTiming(allContacts.length); // обновляем окно для ETA
 
-        const eta = calcEtaSeconds(allContacts.length, total);
+        // Убываем таймер на каждые 10 собранных контактов
+        if (remainingSeconds !== null) {
+          const newMilestone = Math.floor(allContacts.length / 10) * 10;
+          if (newMilestone > lastMilestone) {
+            const steps = (newMilestone - lastMilestone) / 10;
+            remainingSeconds = Math.max(0, remainingSeconds - steps * TIME_PER_10);
+            lastMilestone = newMilestone;
+            console.log(`[CRM] ⏱ Порог ${newMilestone}: осталось ${remainingSeconds}с`);
+          }
+        }
+
         const pct = total ? `${Math.round(allContacts.length / total * 100)}%` : '?%';
-        console.log(`[CRM] +${batch.length} | ${allContacts.length}${total ? `/${total}` : ''} (${pct}) ETA=${eta ?? '?'}с`);
-        await reportProgress(allContacts.length, total, 'running', eta, allContacts);
+        console.log(`[CRM] +${batch.length} | ${allContacts.length}${total ? `/${total}` : ''} (${pct}) ETA=${remainingSeconds ?? '?'}с`);
+        await reportProgress(allContacts.length, total, 'running', remainingSeconds, allContacts);
       } else {
         emptyCycles++;
         console.log(`[CRM] Нет новых (${emptyCycles}${total ? `, осталось: ${total - allContacts.length}` : ''})`);
-        // ETA не пересчитываем — скорость та же, данных нет
-        await reportProgress(allContacts.length, total, 'running', calcEtaSeconds(allContacts.length, total));
+        await reportProgress(allContacts.length, total, 'running', remainingSeconds);
       }
     }
 
@@ -435,12 +444,12 @@
 
   function startSync() {
     if (isRunning) return;
-    seenUrls              = new Set();
+    seenUrls               = new Set();
     _cachedScrollContainer = null;
-    isRunning             = true;
-    currentToken          = makeStopToken();
-    timingWindow.length   = 0;
+    isRunning              = true;
+    currentToken           = makeStopToken();
 
+    // Сбрасываем всё перед стартом
     chrome.storage.local.set({
       crm_sync_status:      'running',
       crm_sync_phase:       'scrolling',
@@ -482,6 +491,6 @@
 
   if (chrome.runtime?.id) chrome.runtime.sendMessage({ type: 'CONTENT_READY' }).catch(() => {});
 
-  console.log('[CRM] content.js v1.2 готов');
+  console.log('[CRM] content.js v1.3 готов');
 
 })();

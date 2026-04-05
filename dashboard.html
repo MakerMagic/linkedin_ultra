@@ -80,7 +80,7 @@
                 <!-- Счётчик: "Собрано 347 из 1234" — целиком из content.js -->
                 <p id="syncCount" class="sync-counter__value">0</p>
 
-                <!-- ETA: появляется только во время синхронизации когда total известен -->
+                <!-- ETA: появляется только во время синхронизации когда собрано >= 10 -->
                 <p id="syncEta" class="sync-eta" hidden>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="10"/>
@@ -100,9 +100,9 @@
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    Скачать Excel
+                    Скачать CSV
                   </button>
-                  <p class="sync-hint">Файл .tsv открывается в Excel — колонка A: Name, колонка B: URL.</p>
+                  <p class="sync-hint">Файл .csv открывается в Excel — колонка A: Name, колонка B: URL.</p>
                 </div>
               </div>
             </div>
