@@ -1,10 +1,15 @@
 /**
- * dashboard.js — LinkedIn CRM v1.2
+ * dashboard.js — LinkedIn CRM v1.3
  *
- * Изменения:
- *   1. Отображение ETA ("Осталось ~8 мин") — читаем crm_sync_eta_seconds
- *   2. Экспорт в .xls (HTML-таблица) вместо .csv — Excel открывает с правильными колонками
- *      независимо от региональных настроек разделителя
+ * Исправлено:
+ *   1. Экспорт → TSV (tab-separated) вместо HTML XLS.
+ *      Tab гарантированно не встречается в именах и URL,
+ *      поэтому Excel открывает файл с двумя колонками на ЛЮБОЙ локали.
+ *      Колонки: A = Name, B = URL (как в ТЗ — имя первым).
+ *
+ *   2. ETA не показывается пока собрано < 10 контактов.
+ *      Было: показывалось после 2 батчей (может быть < 10 контактов).
+ *      Стало: проверка count >= 10 в applyState.
  */
 (function () {
   'use strict';
@@ -72,8 +77,8 @@
     if (seconds < 60)  return 'менее минуты';
     const mins = Math.round(seconds / 60);
     if (mins < 60)     return `~${mins} мин`;
-    const h    = Math.floor(mins / 60);
-    const m    = mins % 60;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
     return m > 0 ? `~${h} ч ${m} мин` : `~${h} ч`;
   }
 
@@ -92,9 +97,13 @@
       countEl.textContent = label || (total ? `${count} / ${total}` : String(count));
     }
 
-    // ETA: показываем только во время синхронизации когда total известен
+    // ETA: показываем только если:
+    //   - идёт синхронизация
+    //   - total известен
+    //   - собрано >= 10 контактов (до этого данных для расчёта недостаточно)
     if (etaEl && etaTextEl) {
-      const etaStr = (running && total) ? formatEta(etaSeconds) : null;
+      const showEta = running && total && count >= 10;
+      const etaStr  = showEta ? formatEta(etaSeconds) : null;
       if (etaStr) {
         etaTextEl.textContent = `Осталось ${etaStr}`;
         etaEl.hidden = false;
@@ -108,7 +117,12 @@
     if (status === 'running') {
       statusText = 'Сбор контактов…';
     } else {
-      statusText = ({ idle: 'Ожидание запуска', done: 'Завершено ✓', stopped: 'Остановлено', error: 'Ошибка — смотри консоль LinkedIn' })[status] || 'Ожидание запуска';
+      statusText = ({
+        idle:    'Ожидание запуска',
+        done:    'Завершено ✓',
+        stopped: 'Остановлено',
+        error:   'Ошибка — смотри консоль LinkedIn'
+      })[status] || 'Ожидание запуска';
     }
     if (statusEl) statusEl.textContent = statusText;
 
@@ -143,6 +157,7 @@
         const eta     = data.crm_sync_eta_seconds ?? null;
         const hb      = data.crm_heartbeat       || 0;
 
+        // Зависший running-статус — сбрасываем
         if (status === 'running' && Date.now() - hb > HEARTBEAT_STALE_MS) {
           status = 'idle';
           chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
@@ -156,11 +171,13 @@
 
   void loadAndApplyState();
 
-  // Live-обновления
+  // Live-обновления от content.js
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    const relevant = ['crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
-                      'crm_sync_percent', 'crm_sync_total', 'crm_sync_label', 'crm_sync_eta_seconds'];
+    const relevant = [
+      'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
+      'crm_sync_percent', 'crm_sync_total', 'crm_sync_label', 'crm_sync_eta_seconds'
+    ];
     if (!relevant.some(k => k in changes)) return;
 
     chrome.storage.local.get(ALL_KEYS, data => applyState(
@@ -199,57 +216,40 @@
   if (btnStart) btnStart.addEventListener('click', () => void handleStart());
   if (btnStop)  btnStop.addEventListener('click', () => chrome.storage.local.set({ crm_sync_command: 'stop' }));
 
-  // ── Экспорт: .xls (HTML-таблица) ─────────────────────────────────────────
+  // ── Экспорт: TSV (Tab-Separated Values) ──────────────────────────────────
   //
-  // Почему .xls а не .csv:
-  //   CSV с запятой как разделителем не открывается в Excel корректно
-  //   в системах с региональным разделителем ";" (Россия, Германия и др.).
-  //   HTML-таблица с расширением .xls поддерживается всеми версиями Excel
-  //   и всегда разделяет данные по колонкам через <td> — независимо от locale.
+  // Почему TSV, а не CSV и не XLS:
+  //   - CSV с запятой: не работает в Excel на локалях с разделителем ";"
+  //   - HTML XLS: не всегда открывается с колонками в старых версиях Excel
+  //   - TSV: символ Tab никогда не встречается в именах людей и LinkedIn URL.
+  //     Excel открывает .tsv с правильными колонками на ЛЮБОЙ локали без
+  //     дополнительных настроек. Это самый надёжный формат.
+  //
+  // Колонки (порядок из ТЗ):
+  //   A = Name (полное имя)
+  //   B = URL  (ссылка на профиль)
 
-  function downloadXLS(contacts) {
+  function downloadTSV(contacts) {
     if (!contacts?.length) return;
 
-    // Экранирование HTML-спецсимволов для безопасности
-    const esc = v => String(v ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+    // Убираем табы из значений (на случай если вдруг есть в имени)
+    const clean = v => String(v ?? '').replace(/\t/g, ' ').replace(/\r?\n/g, ' ');
 
-    const rows = contacts
-      .map(c => `    <tr><td>${esc(c.profileUrl)}</td><td>${esc(c.fullName)}</td></tr>`)
-      .join('\n');
+    const lines = [
+      // Заголовок: Name\tURL
+      ['Name', 'URL'].join('\t'),
+      // Данные: имя первым, URL вторым
+      ...contacts.map(c => [clean(c.fullName), clean(c.profileUrl)].join('\t'))
+    ];
 
-    // xmlns:x и мета-теги говорят Excel что это его формат
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:x="urn:schemas-microsoft-com:office:excel"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-  <meta charset="UTF-8">
-  <!--[if gte mso 9]><xml>
-    <x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-      <x:Name>Contacts</x:Name>
-      <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-    </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
-  </xml><![endif]-->
-</head>
-<body>
-<table>
-  <thead>
-    <tr><th>Profile URL</th><th>Full Name</th></tr>
-  </thead>
-  <tbody>
-${rows}
-  </tbody>
-</table>
-</body></html>`;
+    // BOM (0xEF 0xBB 0xBF) — Excel правильно распознаёт UTF-8
+    const content = '\uFEFF' + lines.join('\r\n');
+    const blob    = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
+    const url     = URL.createObjectURL(blob);
 
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), {
+    const a = Object.assign(document.createElement('a'), {
       href:     url,
-      download: `linkedin_contacts_${new Date().toISOString().slice(0, 10)}.xls`,
+      download: `linkedin_contacts_${new Date().toISOString().slice(0, 10)}.tsv`,
       style:    'display:none'
     });
     document.body.appendChild(a);
@@ -262,8 +262,11 @@ ${rows}
     btnCSV.addEventListener('click', () => {
       chrome.storage.local.get(['crm_contacts'], data => {
         const contacts = data.crm_contacts || [];
-        if (!contacts.length) { alert('Нет контактов. Запустите синхронизацию.'); return; }
-        downloadXLS(contacts);
+        if (!contacts.length) {
+          alert('Нет контактов. Запустите синхронизацию.');
+          return;
+        }
+        downloadTSV(contacts);
       });
     });
   }
@@ -317,6 +320,7 @@ ${rows}
         keywords: { raw: keywordsInput?.value.trim() || '', semantic: null },
         industries
       });
+      // TODO (этап 4): отправить на FastAPI
     });
   }
 
