@@ -57,7 +57,6 @@
             <h2 id="sync-card-title" class="card__title">Состояние</h2>
 
             <div class="sync-layout">
-              <!-- Кольцо -->
               <div class="progress-ring" aria-hidden="true">
                 <svg class="progress-ring__svg" viewBox="0 0 120 120">
                   <defs>
@@ -78,8 +77,17 @@
               <div class="sync-meta">
                 <p id="syncStatus" class="sync-status">Ожидание запуска</p>
 
-                <!-- FIX 1: Убран префикс "Найдено контактов:" — label приходит целиком из content.js -->
+                <!-- Счётчик: "Собрано 347 из 1234" — целиком из content.js -->
                 <p id="syncCount" class="sync-counter__value">0</p>
+
+                <!-- ETA: появляется только во время синхронизации когда total известен -->
+                <p id="syncEta" class="sync-eta" hidden>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <span id="syncEtaText"></span>
+                </p>
 
                 <div class="sync-actions">
                   <button type="button" id="btnStart" class="btn btn--primary">Начать синхронизацию</button>
@@ -92,9 +100,9 @@
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    Скачать CSV
+                    Скачать Excel
                   </button>
-                  <p class="sync-hint">CSV открывается в Excel. Колонки: Profile URL, Full Name.</p>
+                  <p class="sync-hint">Файл .xls открывается в Excel — Profile URL и Full Name в отдельных колонках.</p>
                 </div>
               </div>
             </div>

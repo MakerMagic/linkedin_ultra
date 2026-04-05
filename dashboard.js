@@ -1,9 +1,10 @@
 /**
- * dashboard.js — LinkedIn CRM v1.0
+ * dashboard.js — LinkedIn CRM v1.2
  *
- * Изменение относительно v0.6:
- *   applyState читает crm_sync_label и показывает его как счётчик.
- *   Примеры: "Собрано 347 из 1234" / "Собрано 85"
+ * Изменения:
+ *   1. Отображение ETA ("Осталось ~8 мин") — читаем crm_sync_eta_seconds
+ *   2. Экспорт в .xls (HTML-таблица) вместо .csv — Excel открывает с правильными колонками
+ *      независимо от региональных настроек разделителя
  */
 (function () {
   'use strict';
@@ -15,17 +16,17 @@
   const navButtons = document.querySelectorAll('.nav__item[data-nav]:not([disabled])');
   const panels     = document.querySelectorAll('.main-panel[data-panel]');
 
-  const arc       = document.getElementById('progressArc');
-  const pctEl     = document.getElementById('progressPercent');
-  const statusEl  = document.getElementById('syncStatus');
-  const countEl   = document.getElementById('syncCount');
-  const btnStart  = document.getElementById('btnStart');
-  const btnStop   = document.getElementById('btnStop');
-  const btnCSV    = document.getElementById('btnDownloadCSV');
+  const arc        = document.getElementById('progressArc');
+  const pctEl      = document.getElementById('progressPercent');
+  const statusEl   = document.getElementById('syncStatus');
+  const countEl    = document.getElementById('syncCount');
+  const etaEl      = document.getElementById('syncEta');
+  const etaTextEl  = document.getElementById('syncEtaText');
+  const btnStart   = document.getElementById('btnStart');
+  const btnStop    = document.getElementById('btnStop');
+  const btnCSV     = document.getElementById('btnDownloadCSV');
 
-  // =====================================================================
-  // НАВИГАЦИЯ
-  // =====================================================================
+  // ── Навигация ─────────────────────────────────────────────────────────────
 
   function setActiveView(viewId) {
     navButtons.forEach(btn => {
@@ -49,9 +50,7 @@
     el.addEventListener('click', e => { e.preventDefault(); setActiveView('sync'); });
   });
 
-  // =====================================================================
-  // КОЛЬЦО ПРОГРЕССА
-  // =====================================================================
+  // ── Кольцо прогресса ──────────────────────────────────────────────────────
 
   function setRingProgress(pct) {
     const p = Math.max(0, Math.min(100, pct));
@@ -62,19 +61,25 @@
     if (pctEl) pctEl.textContent = String(Math.round(p));
   }
 
-  // =====================================================================
-  // ПРИМЕНЕНИЕ СОСТОЯНИЯ
-  // =====================================================================
+  // ── ETA форматирование ────────────────────────────────────────────────────
 
   /**
-   * @param {'idle'|'running'|'done'|'stopped'|'error'} status
-   * @param {string} phase
-   * @param {number} count
-   * @param {number} percent
-   * @param {number|null} total
-   * @param {string} label  — строка "Собрано X из Y" от content.js
+   * Форматирует секунды в читаемую строку.
+   * Примеры: "менее минуты", "~3 мин", "~1 ч 12 мин"
    */
-  function applyState(status, phase, count, percent, total, label) {
+  function formatEta(seconds) {
+    if (seconds === null || seconds === undefined || seconds < 0) return null;
+    if (seconds < 60)  return 'менее минуты';
+    const mins = Math.round(seconds / 60);
+    if (mins < 60)     return `~${mins} мин`;
+    const h    = Math.floor(mins / 60);
+    const m    = mins % 60;
+    return m > 0 ? `~${h} ч ${m} мин` : `~${h} ч`;
+  }
+
+  // ── Применение состояния ──────────────────────────────────────────────────
+
+  function applyState(status, phase, count, percent, total, label, etaSeconds) {
     const running     = status === 'running';
     const hasContacts = count > 0;
 
@@ -82,77 +87,68 @@
     if (btnStop)  btnStop.disabled  = !running;
     if (btnCSV)   btnCSV.disabled   = !hasContacts;
 
-    // ── Счётчик контактов ──
-    // Приоритет: label от content.js ("Собрано 347 из 1234")
-    // Fallback: генерируем локально
+    // Счётчик: "Собрано 347 из 1234"
     if (countEl) {
-      if (label) {
-        countEl.textContent = label;
-      } else if (total && total > 0) {
-        countEl.textContent = `${count} / ${total}`;
+      countEl.textContent = label || (total ? `${count} / ${total}` : String(count));
+    }
+
+    // ETA: показываем только во время синхронизации когда total известен
+    if (etaEl && etaTextEl) {
+      const etaStr = (running && total) ? formatEta(etaSeconds) : null;
+      if (etaStr) {
+        etaTextEl.textContent = `Осталось ${etaStr}`;
+        etaEl.hidden = false;
       } else {
-        countEl.textContent = String(count);
+        etaEl.hidden = true;
       }
     }
 
-    // ── Статус ──
+    // Статус
     let statusText;
     if (status === 'running') {
-      statusText = phase === 'collecting' ? 'Сбор контактов…' : 'Скроллинг страницы…';
+      statusText = 'Сбор контактов…';
     } else {
-      const labels = {
-        idle:    'Ожидание запуска',
-        done:    'Завершено ✓',
-        stopped: 'Остановлено',
-        error:   'Ошибка — смотри консоль LinkedIn'
-      };
-      statusText = labels[status] || 'Ожидание запуска';
+      statusText = ({ idle: 'Ожидание запуска', done: 'Завершено ✓', stopped: 'Остановлено', error: 'Ошибка — смотри консоль LinkedIn' })[status] || 'Ожидание запуска';
     }
     if (statusEl) statusEl.textContent = statusText;
 
-    // ── Кольцо ──
+    // Кольцо
     setRingProgress(status === 'idle' ? 0 : percent);
 
-    // ── Текст кнопки «Начать» ──
+    // Текст кнопки
     if (btnStart) {
-      btnStart.textContent =
-        hasContacts && !running && status === 'stopped'
-          ? 'Продолжить синхронизацию'
-          : 'Начать синхронизацию';
+      btnStart.textContent = (hasContacts && !running && status === 'stopped')
+        ? 'Продолжить синхронизацию'
+        : 'Начать синхронизацию';
     }
   }
 
-  // =====================================================================
-  // ИНИЦИАЛИЗАЦИЯ
-  // =====================================================================
+  // ── Инициализация ─────────────────────────────────────────────────────────
 
-  const STORAGE_KEYS = [
+  const ALL_KEYS = [
     'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
-    'crm_sync_percent', 'crm_sync_total', 'crm_sync_heartbeat',
-    'crm_sync_label'
+    'crm_sync_percent', 'crm_sync_total', 'crm_sync_label',
+    'crm_sync_eta_seconds', 'crm_heartbeat'
   ];
-
-  // Алиас: heartbeat может быть записан как crm_heartbeat (content.js) или crm_sync_heartbeat
-  const ALL_KEYS = [...STORAGE_KEYS, 'crm_heartbeat'];
 
   async function loadAndApplyState() {
     return new Promise(resolve => {
       chrome.storage.local.get(ALL_KEYS, data => {
-        let status  = data.crm_sync_status  || 'idle';
-        const phase   = data.crm_sync_phase   || '';
-        const count   = data.crm_sync_count   || 0;
-        const percent = data.crm_sync_percent  || 0;
-        const total   = data.crm_sync_total    || null;
-        const label   = data.crm_sync_label    || '';
-        const hb      = data.crm_heartbeat    || 0;
+        let status    = data.crm_sync_status     || 'idle';
+        const phase   = data.crm_sync_phase      || '';
+        const count   = data.crm_sync_count      || 0;
+        const percent = data.crm_sync_percent    || 0;
+        const total   = data.crm_sync_total      || null;
+        const label   = data.crm_sync_label      || '';
+        const eta     = data.crm_sync_eta_seconds ?? null;
+        const hb      = data.crm_heartbeat       || 0;
 
-        // Зависший running → сбрасываем
         if (status === 'running' && Date.now() - hb > HEARTBEAT_STALE_MS) {
           status = 'idle';
           chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
         }
 
-        applyState(status, phase, count, percent, total, label);
+        applyState(status, phase, count, percent, total, label, eta);
         resolve();
       });
     });
@@ -160,28 +156,25 @@
 
   void loadAndApplyState();
 
-  // Live-обновления от content.js
+  // Live-обновления
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    const relevant = [
-      'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
-      'crm_sync_percent', 'crm_sync_total', 'crm_sync_label'
-    ];
+    const relevant = ['crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
+                      'crm_sync_percent', 'crm_sync_total', 'crm_sync_label', 'crm_sync_eta_seconds'];
     if (!relevant.some(k => k in changes)) return;
 
     chrome.storage.local.get(ALL_KEYS, data => applyState(
-      data.crm_sync_status  || 'idle',
-      data.crm_sync_phase   || '',
-      data.crm_sync_count   || 0,
-      data.crm_sync_percent || 0,
-      data.crm_sync_total   || null,
-      data.crm_sync_label   || ''
+      data.crm_sync_status     || 'idle',
+      data.crm_sync_phase      || '',
+      data.crm_sync_count      || 0,
+      data.crm_sync_percent    || 0,
+      data.crm_sync_total      || null,
+      data.crm_sync_label      || '',
+      data.crm_sync_eta_seconds ?? null
     ));
   });
 
-  // =====================================================================
-  // КНОПКИ
-  // =====================================================================
+  // ── Кнопки управления ─────────────────────────────────────────────────────
 
   async function handleStart() {
     if (btnStart) btnStart.disabled = true;
@@ -204,37 +197,60 @@
   }
 
   if (btnStart) btnStart.addEventListener('click', () => void handleStart());
+  if (btnStop)  btnStop.addEventListener('click', () => chrome.storage.local.set({ crm_sync_command: 'stop' }));
 
-  if (btnStop) {
-    btnStop.addEventListener('click', () => {
-      chrome.storage.local.set({ crm_sync_command: 'stop' });
-    });
-  }
+  // ── Экспорт: .xls (HTML-таблица) ─────────────────────────────────────────
+  //
+  // Почему .xls а не .csv:
+  //   CSV с запятой как разделителем не открывается в Excel корректно
+  //   в системах с региональным разделителем ";" (Россия, Германия и др.).
+  //   HTML-таблица с расширением .xls поддерживается всеми версиями Excel
+  //   и всегда разделяет данные по колонкам через <td> — независимо от locale.
 
-  // =====================================================================
-  // CSV ЭКСПОРТ
-  // =====================================================================
-
-  function downloadCSV(contacts) {
+  function downloadXLS(contacts) {
     if (!contacts?.length) return;
 
-    const esc = v => {
-      const s = String(v ?? '');
-      return (s.includes(',') || s.includes('"') || s.includes('\n'))
-        ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
+    // Экранирование HTML-спецсимволов для безопасности
+    const esc = v => String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
 
-    const rows = [
-      ['Profile URL', 'Full Name'].map(esc).join(','),
-      ...contacts.map(c => [esc(c.profileUrl ?? ''), esc(c.fullName ?? '')].join(','))
-    ];
+    const rows = contacts
+      .map(c => `    <tr><td>${esc(c.profileUrl)}</td><td>${esc(c.fullName)}</td></tr>`)
+      .join('\n');
 
-    const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    // xmlns:x и мета-теги говорят Excel что это его формат
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:x="urn:schemas-microsoft-com:office:excel"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta charset="UTF-8">
+  <!--[if gte mso 9]><xml>
+    <x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+      <x:Name>Contacts</x:Name>
+      <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+    </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
+  </xml><![endif]-->
+</head>
+<body>
+<table>
+  <thead>
+    <tr><th>Profile URL</th><th>Full Name</th></tr>
+  </thead>
+  <tbody>
+${rows}
+  </tbody>
+</table>
+</body></html>`;
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
     const url  = URL.createObjectURL(blob);
     const a    = Object.assign(document.createElement('a'), {
-      href: url,
-      download: `linkedin_contacts_${new Date().toISOString().slice(0, 10)}.csv`,
-      style: 'display:none'
+      href:     url,
+      download: `linkedin_contacts_${new Date().toISOString().slice(0, 10)}.xls`,
+      style:    'display:none'
     });
     document.body.appendChild(a);
     a.click();
@@ -247,14 +263,12 @@
       chrome.storage.local.get(['crm_contacts'], data => {
         const contacts = data.crm_contacts || [];
         if (!contacts.length) { alert('Нет контактов. Запустите синхронизацию.'); return; }
-        downloadCSV(contacts);
+        downloadXLS(contacts);
       });
     });
   }
 
-  // =====================================================================
-  // ПОИСК: ОТРАСЛИ
-  // =====================================================================
+  // ── Поиск: отрасли ────────────────────────────────────────────────────────
 
   const INDUSTRY_OPTIONS = [
     { id: 'finance',         label: 'Финансы' },
