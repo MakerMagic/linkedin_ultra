@@ -1,7 +1,10 @@
 /**
- * dashboard.js — LinkedIn CRM v1.4
+ * dashboard.js — LinkedIn CRM v1.5
  *
- * Изменение: CSV теперь 5 колонок: Name | URL | Job Title | Company | School
+ * Изменения:
+ *   1. При status=done: кнопка «Начать заново», btnStop disabled
+ *   2. Confirmation modal перед restart
+ *   3. Restart: вызов RESTART_SYNC в background, потом START_SYNC
  */
 (function () {
   'use strict';
@@ -22,6 +25,11 @@
   const btnStart   = document.getElementById('btnStart');
   const btnStop    = document.getElementById('btnStop');
   const btnCSV     = document.getElementById('btnDownloadCSV');
+
+  // Modal
+  const restartModal   = document.getElementById('restartModal');
+  const btnModalConfirm = document.getElementById('btnModalConfirm');
+  const btnModalCancel  = document.getElementById('btnModalCancel');
 
   // ── Навигация ─────────────────────────────────────────────────────────────
 
@@ -74,16 +82,37 @@
 
   function applyState(status, phase, count, percent, total, label, etaSeconds) {
     const running     = status === 'running';
+    const isDone      = status === 'done';
     const hasContacts = count > 0;
 
-    if (btnStart) btnStart.disabled = running;
-    if (btnStop)  btnStop.disabled  = !running;
-    if (btnCSV)   btnCSV.disabled   = !hasContacts;
+    // Кнопка «Начать»
+    if (btnStart) {
+      btnStart.disabled = running;
 
+      if (isDone) {
+        // Завершено → «Начать заново»
+        btnStart.textContent = 'Начать заново';
+      } else if (hasContacts && !running && status === 'stopped') {
+        btnStart.textContent = 'Продолжить синхронизацию';
+      } else {
+        btnStart.textContent = 'Начать синхронизацию';
+      }
+    }
+
+    // Кнопка «Остановить» — disabled при 100% (done) и при idle
+    if (btnStop) {
+      btnStop.disabled = !running || isDone;
+    }
+
+    // Кнопка CSV
+    if (btnCSV) btnCSV.disabled = !hasContacts;
+
+    // Счётчик
     if (countEl) {
       countEl.textContent = label || (total ? `${count} / ${total}` : String(count));
     }
 
+    // ETA — только во время синхронизации, когда total известен и собрано >= 10
     if (etaEl && etaTextEl) {
       const showEta = running && total && count >= 10 && etaSeconds !== null;
       const etaStr  = showEta ? formatEta(etaSeconds) : null;
@@ -95,6 +124,7 @@
       }
     }
 
+    // Статус
     let statusText;
     if (status === 'running') {
       statusText = 'Сбор контактов…';
@@ -108,13 +138,8 @@
     }
     if (statusEl) statusEl.textContent = statusText;
 
+    // Кольцо
     setRingProgress(status === 'idle' ? 0 : percent);
-
-    if (btnStart) {
-      btnStart.textContent = (hasContacts && !running && status === 'stopped')
-        ? 'Продолжить синхронизацию'
-        : 'Начать синхронизацию';
-    }
   }
 
   // ── Инициализация ─────────────────────────────────────────────────────────
@@ -169,7 +194,68 @@
     ));
   });
 
-  // ── Кнопки ────────────────────────────────────────────────────────────────
+  // ── Modal ─────────────────────────────────────────────────────────────────
+
+  function showRestartModal() {
+    if (restartModal) restartModal.hidden = false;
+  }
+
+  function hideRestartModal() {
+    if (restartModal) restartModal.hidden = true;
+  }
+
+  // Закрываем по клику на backdrop (не на сам box)
+  if (restartModal) {
+    restartModal.addEventListener('click', e => {
+      if (e.target === restartModal) hideRestartModal();
+    });
+  }
+
+  if (btnModalCancel) btnModalCancel.addEventListener('click', hideRestartModal);
+
+  if (btnModalConfirm) {
+    btnModalConfirm.addEventListener('click', async () => {
+      hideRestartModal();
+      await performRestart();
+    });
+  }
+
+  // Закрытие по Escape
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && restartModal && !restartModal.hidden) {
+      hideRestartModal();
+    }
+  });
+
+  // ── Restart ───────────────────────────────────────────────────────────────
+
+  /**
+   * 1. Просим background сбросить storage и перезагрузить вкладку LinkedIn.
+   * 2. Ждём небольшой паузы (страница грузится).
+   * 3. Запускаем синхронизацию заново.
+   */
+  async function performRestart() {
+    if (statusEl) statusEl.textContent = 'Сброс данных…';
+    if (btnStart) btnStart.disabled = true;
+
+    await new Promise(resolve => {
+      chrome.runtime.sendMessage({ type: 'RESTART_SYNC' }, response => {
+        if (chrome.runtime.lastError) {
+          console.warn('[CRM Dashboard] RESTART_SYNC ошибка:', chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
+    });
+
+    // Ждём пока вкладка LinkedIn перезагрузится и content.js поднимется
+    if (statusEl) statusEl.textContent = 'Перезагрузка LinkedIn…';
+    await new Promise(r => setTimeout(r, 4000));
+
+    // Запускаем синхронизацию
+    await handleStart();
+  }
+
+  // ── Кнопка «Начать» / «Начать заново» ────────────────────────────────────
 
   async function handleStart() {
     if (btnStart) btnStart.disabled = true;
@@ -191,23 +277,34 @@
     chrome.storage.local.set({ crm_sync_command: 'start', crm_sync_status: 'running' });
   }
 
-  if (btnStart) btnStart.addEventListener('click', () => void handleStart());
-  if (btnStop)  btnStop.addEventListener('click', () => chrome.storage.local.set({ crm_sync_command: 'stop' }));
+  if (btnStart) {
+    btnStart.addEventListener('click', () => {
+      // Читаем текущий статус чтобы понять — это restart или обычный старт
+      chrome.storage.local.get(['crm_sync_status'], data => {
+        const status = data.crm_sync_status || 'idle';
+        if (status === 'done') {
+          // Показываем confirmation modal
+          showRestartModal();
+        } else {
+          void handleStart();
+        }
+      });
+    });
+  }
 
-  // ── CSV экспорт — 5 колонок: Name | URL | Job Title | Company | School ────
-  //
-  // Порядок колонок строго по ТЗ.
-  // Пустые поля — пустая ячейка (не "null", не "undefined").
-  // BOM + CRLF — Excel корректно читает UTF-8 и кириллицу.
-  // Кавычки — только если в значении есть запятая (RFC 4180).
+  if (btnStop) {
+    btnStop.addEventListener('click', () => {
+      chrome.storage.local.set({ crm_sync_command: 'stop' });
+    });
+  }
+
+  // ── CSV экспорт — 5 колонок ───────────────────────────────────────────────
 
   function downloadCSV(contacts) {
     if (!contacts?.length) return;
 
-    // Экранирование поля по RFC 4180
     const esc = v => {
       const s = String(v ?? '').replace(/\r?\n/g, ' ');
-      // Оборачиваем в кавычки если есть запятая или кавычки
       if (s.includes(',') || s.includes('"')) {
         return `"${s.replace(/"/g, '""')}"`;
       }
@@ -215,15 +312,13 @@
     };
 
     const lines = [
-      // Заголовок — 5 колонок
       'Name,URL,Job Title,Company,School',
-      // Данные
       ...contacts.map(c => [
         esc(c.fullName   ?? ''),
         esc(c.profileUrl ?? ''),
-        esc(c.jobTitle   ?? ''),   // пусто если не распарсилось
-        esc(c.company    ?? ''),   // пусто если не распарсилось
-        esc(c.school     ?? '')    // пусто если не распарсилось
+        esc(c.jobTitle   ?? ''),
+        esc(c.company    ?? ''),
+        esc(c.school     ?? '')
       ].join(','))
     ];
 

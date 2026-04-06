@@ -76,20 +76,17 @@
 
               <div class="sync-meta">
                 <p id="syncStatus" class="sync-status">Ожидание запуска</p>
-
-                <!-- Счётчик: "Собрано 347 из 1234" — целиком из content.js -->
                 <p id="syncCount" class="sync-counter__value">0</p>
 
-                <!-- ETA: появляется только во время синхронизации когда собрано >= 10 -->
                 <p id="syncEta" class="sync-eta" hidden>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                   </svg>
                   <span id="syncEtaText"></span>
                 </p>
 
                 <div class="sync-actions">
+                  <!-- btnStart меняет текст: "Начать" / "Продолжить" / "Начать заново" -->
                   <button type="button" id="btnStart" class="btn btn--primary">Начать синхронизацию</button>
                   <button type="button" id="btnStop"  class="btn btn--ghost" disabled>Остановить</button>
                 </div>
@@ -102,7 +99,7 @@
                     </svg>
                     Скачать CSV
                   </button>
-                  <p class="sync-hint">Файл .csv открывается в Excel — колонка A: Name, колонка B: URL.</p>
+                  <p class="sync-hint">Name · URL · Job Title · Company · School</p>
                 </div>
               </div>
             </div>
@@ -141,7 +138,7 @@
               <label class="field">
                 <span class="field__label">Ключевые слова</span>
                 <input type="search" id="searchKeywords" class="field__input" placeholder="Имя, должность, компания…" autocomplete="off"/>
-                <span class="field__hint">AI-интерпретация будет добавлена на следующих шагах.</span>
+                <span class="field__hint">AI-интерпретация — следующий этап.</span>
               </label>
               <div class="field industry-field" role="group" aria-labelledby="industry-field-label">
                 <span class="field__label" id="industry-field-label">Отрасли</span>
@@ -157,6 +154,22 @@
 
       </main>
     </div>
+
+    <!-- ── Confirmation modal (restart) ── -->
+    <div id="restartModal" class="modal-backdrop" hidden aria-modal="true" role="dialog" aria-labelledby="modalTitle">
+      <div class="modal-box glass">
+        <h2 id="modalTitle" class="modal-title">Начать заново?</h2>
+        <p class="modal-text">
+          Все собранные контакты будут удалены.<br>
+          Синхронизация запустится с начала.
+        </p>
+        <div class="modal-actions">
+          <button type="button" id="btnModalConfirm" class="btn btn--primary">Да, начать заново</button>
+          <button type="button" id="btnModalCancel"  class="btn btn--ghost">Нет</button>
+        </div>
+      </div>
+    </div>
+
     <script src="dashboard.js"></script>
   </body>
 </html>
