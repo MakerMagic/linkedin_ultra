@@ -1,14 +1,7 @@
 /**
  * dashboard.js — LinkedIn CRM v1.4
  *
- * Исправлено:
- *   1. Экспорт → CSV (comma-separated) вместо TSV.
- *      Формат: Name,URL — простой, надёжный, Excel открывает корректно.
- *      Кавычки только если в имени есть запятая: "Doe, John",https://...
- *      BOM (UTF-8) чтобы Excel правильно читал кириллицу.
- *
- *   2. ETA — формат "~N мин" или "~N сек", не показывается пока собрано < 10.
- *      Данные приходят от content.js через crm_sync_eta_seconds.
+ * Изменение: CSV теперь 5 колонок: Name | URL | Job Title | Company | School
  */
 (function () {
   'use strict';
@@ -67,10 +60,6 @@
 
   // ── ETA форматирование ────────────────────────────────────────────────────
 
-  /**
-   * Форматирует секунды в строку вида "~N мин" или "~N сек".
-   * Возвращает null если значение некорректно.
-   */
   function formatEta(seconds) {
     if (seconds === null || seconds === undefined || seconds < 0) return null;
     if (seconds < 60) return `~${Math.max(1, Math.round(seconds))} сек`;
@@ -91,15 +80,10 @@
     if (btnStop)  btnStop.disabled  = !running;
     if (btnCSV)   btnCSV.disabled   = !hasContacts;
 
-    // Счётчик: "Собрано 347 из 1234" (текст приходит из content.js через label)
     if (countEl) {
       countEl.textContent = label || (total ? `${count} / ${total}` : String(count));
     }
 
-    // ETA: показываем только если:
-    //   - идёт синхронизация
-    //   - total известен
-    //   - собрано >= 10 контактов (до этого данных недостаточно для надёжного расчёта)
     if (etaEl && etaTextEl) {
       const showEta = running && total && count >= 10 && etaSeconds !== null;
       const etaStr  = showEta ? formatEta(etaSeconds) : null;
@@ -111,7 +95,6 @@
       }
     }
 
-    // Статус
     let statusText;
     if (status === 'running') {
       statusText = 'Сбор контактов…';
@@ -125,10 +108,8 @@
     }
     if (statusEl) statusEl.textContent = statusText;
 
-    // Кольцо
     setRingProgress(status === 'idle' ? 0 : percent);
 
-    // Текст кнопки старта
     if (btnStart) {
       btnStart.textContent = (hasContacts && !running && status === 'stopped')
         ? 'Продолжить синхронизацию'
@@ -156,7 +137,6 @@
         const eta     = data.crm_sync_eta_seconds ?? null;
         const hb      = data.crm_heartbeat       || 0;
 
-        // Зависший running-статус — сбрасываем
         if (status === 'running' && Date.now() - hb > HEARTBEAT_STALE_MS) {
           status = 'idle';
           chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
@@ -170,7 +150,6 @@
 
   void loadAndApplyState();
 
-  // Live-обновления от content.js
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     const relevant = [
@@ -190,7 +169,7 @@
     ));
   });
 
-  // ── Кнопки управления ─────────────────────────────────────────────────────
+  // ── Кнопки ────────────────────────────────────────────────────────────────
 
   async function handleStart() {
     if (btnStart) btnStart.disabled = true;
@@ -215,40 +194,39 @@
   if (btnStart) btnStart.addEventListener('click', () => void handleStart());
   if (btnStop)  btnStop.addEventListener('click', () => chrome.storage.local.set({ crm_sync_command: 'stop' }));
 
-  // ── Экспорт: CSV (Comma-Separated Values) ────────────────────────────────
+  // ── CSV экспорт — 5 колонок: Name | URL | Job Title | Company | School ────
   //
-  // Формат строго по ТЗ:
-  //   Строка 1: Name,URL  (заголовок без кавычек)
-  //   Строки данных: имя,url
-  //   Кавычки только если в имени есть запятая: "Doe, John",https://...
-  //   Сепаратор — запятая (,), не точка с запятой
-  //   BOM (0xEF 0xBB 0xBF) — Excel правильно распознаёт UTF-8
-  //
-  // Почему не TSV:
-  //   ТЗ требует именно CSV с запятой.
-  //   Запятая в именах редка, и мы её корректно экранируем кавычками.
+  // Порядок колонок строго по ТЗ.
+  // Пустые поля — пустая ячейка (не "null", не "undefined").
+  // BOM + CRLF — Excel корректно читает UTF-8 и кириллицу.
+  // Кавычки — только если в значении есть запятая (RFC 4180).
 
   function downloadCSV(contacts) {
     if (!contacts?.length) return;
 
-    // Экранируем поле: кавычки только если внутри есть запятая
-    const escapeField = v => {
+    // Экранирование поля по RFC 4180
+    const esc = v => {
       const s = String(v ?? '').replace(/\r?\n/g, ' ');
-      if (s.includes(',')) {
-        // Внутренние кавычки удваиваем по стандарту RFC 4180
+      // Оборачиваем в кавычки если есть запятая или кавычки
+      if (s.includes(',') || s.includes('"')) {
         return `"${s.replace(/"/g, '""')}"`;
       }
       return s;
     };
 
     const lines = [
-      // Заголовок: Name,URL — без кавычек
-      'Name,URL',
-      // Данные: имя первым, URL вторым
-      ...contacts.map(c => `${escapeField(c.fullName)},${escapeField(c.profileUrl)}`)
+      // Заголовок — 5 колонок
+      'Name,URL,Job Title,Company,School',
+      // Данные
+      ...contacts.map(c => [
+        esc(c.fullName   ?? ''),
+        esc(c.profileUrl ?? ''),
+        esc(c.jobTitle   ?? ''),   // пусто если не распарсилось
+        esc(c.company    ?? ''),   // пусто если не распарсилось
+        esc(c.school     ?? '')    // пусто если не распарсилось
+      ].join(','))
     ];
 
-    // BOM + CRLF как требует RFC 4180 и ожидает Excel
     const content = '\uFEFF' + lines.join('\r\n');
     const blob    = new Blob([content], { type: 'text/csv;charset=utf-8' });
     const url     = URL.createObjectURL(blob);
@@ -268,10 +246,7 @@
     btnCSV.addEventListener('click', () => {
       chrome.storage.local.get(['crm_contacts'], data => {
         const contacts = data.crm_contacts || [];
-        if (!contacts.length) {
-          alert('Нет контактов. Запустите синхронизацию.');
-          return;
-        }
+        if (!contacts.length) { alert('Нет контактов. Запустите синхронизацию.'); return; }
         downloadCSV(contacts);
       });
     });
@@ -326,7 +301,6 @@
         keywords: { raw: keywordsInput?.value.trim() || '', semantic: null },
         industries
       });
-      // TODO (этап 4): отправить на FastAPI
     });
   }
 

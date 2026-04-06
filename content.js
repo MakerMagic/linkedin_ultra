@@ -1,16 +1,15 @@
 /**
- * content.js — LinkedIn CRM v1.3
+ * content.js — LinkedIn CRM v1.4
  *
- * Исправлено:
- *   ETA теперь считается через константу TIME_PER_10 (секунд на каждые 10 контактов).
- *   Убрано скользящее среднее — оно давало нестабильные значения.
- *   Сброс таймера и счётчика при каждом старте.
+ * Изменения:
+ *   1. Завершение при остатке < 10: финальный harvest → статус done
+ *   2. extractOccupationDetails: парсим jobTitle, company, school из карточки
+ *   3. extractContact возвращает расширенный объект с новыми полями
  */
 (function () {
   'use strict';
 
-  // ⏱ Среднее время (в секундах) на скролл и парсинг каждых 10 контактов.
-  // Подбирается экспериментально — меняй это значение если время считается неточно.
+  // ⏱ Константа времени на 10 контактов (секунд)
   const TIME_PER_10 = 2;
 
   const CFG = {
@@ -22,7 +21,9 @@
     pollTotalMs:        500,
     confirmScrolls:     2,
     maxEmptyCyclesFB:   8,
-    heartbeatInterval:  4000
+    heartbeatInterval:  4000,
+    // Когда остаток меньше порога — завершаем после одного финального прохода
+    nearEndThreshold:   10
   };
 
   // ── Stop Token ────────────────────────────────────────────────────────────
@@ -48,10 +49,10 @@
 
   // ── Состояние ─────────────────────────────────────────────────────────────
 
-  let isRunning      = false;
-  let currentToken   = null;
-  let heartbeatTimer = null;
-  let seenUrls       = new Set();
+  let isRunning              = false;
+  let currentToken           = null;
+  let heartbeatTimer         = null;
+  let seenUrls               = new Set();
   let _cachedScrollContainer = null;
 
   // ── Утилиты ───────────────────────────────────────────────────────────────
@@ -83,11 +84,10 @@
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
-  // ── Скролл контейнера ─────────────────────────────────────────────────────
+  // ── Скролл ────────────────────────────────────────────────────────────────
 
   function findScrollContainer() {
     if (_cachedScrollContainer && document.contains(_cachedScrollContainer)) return _cachedScrollContainer;
-
     const anchor = document.querySelector('a[href*="/in/"]');
     if (anchor) {
       let el = anchor.parentElement;
@@ -103,12 +103,10 @@
         depth++;
       }
     }
-
     if (document.body.scrollHeight > document.body.clientHeight + 100) {
       const ov = window.getComputedStyle(document.body).overflowY;
       if (ov !== 'hidden') { _cachedScrollContainer = document.body; return document.body; }
     }
-
     _cachedScrollContainer = document.documentElement;
     return document.documentElement;
   }
@@ -161,7 +159,142 @@
     });
   }
 
-  // ── DOM: ссылки и извлечение ──────────────────────────────────────────────
+  // ── Парсинг occupation / опыта из карточки ────────────────────────────────
+
+  /**
+   * Проверяет является ли текст названием учебного заведения.
+   */
+  function isEducationalInstitution(text) {
+    return /university|college|school|institute|academy|polytechnic|seminary|lyceum|лицей|колледж|университет|институт|академия/i.test(text);
+  }
+
+  /**
+   * Парсит строку "Должность at Компания" → {jobTitle, company, school}.
+   * Обрабатывает паттерны:
+   *   "Software Engineer at Google"  → jobTitle:"Software Engineer", company:"Google"
+   *   "Student at MIT"               → jobTitle:"Student", school:"MIT"
+   *   "Harvard University"           → school:"Harvard University"
+   *   "CEO"                          → jobTitle:"CEO"
+   */
+  function parseOccupationString(text) {
+    if (!text) return { jobTitle: null, company: null, school: null };
+
+    // Паттерн "Должность at Организация"
+    const atMatch = text.match(/^(.+?)\s+at\s+(.+)$/i);
+    if (atMatch) {
+      const title = atMatch[1].trim();
+      const org   = atMatch[2].trim();
+      if (isEducationalInstitution(org)) {
+        return { jobTitle: title || null, company: null, school: org };
+      }
+      return { jobTitle: title || null, company: org, school: null };
+    }
+
+    // Текст без "at" — просто учебное заведение или должность
+    if (isEducationalInstitution(text)) {
+      return { jobTitle: null, company: null, school: text };
+    }
+
+    return { jobTitle: text, company: null, school: null };
+  }
+
+  /**
+   * Извлекает jobTitle, company, school из карточки контакта.
+   *
+   * Слой 1 — специфичные componentKey-секции (появляются в новом UI LinkedIn):
+   *   div._936a7c6b с componentKey, содержащим "ExperienceTopLevelSection" или "EducationTopLevelSection"
+   *   Классы p-элементов как описано в ТЗ (могут меняться с обновлениями LinkedIn).
+   *
+   * Слой 2 — occupation/subtitle строка из карточки (универсальный fallback):
+   *   Текст вида "Software Engineer at Google" → парсим через parseOccupationString().
+   */
+  function extractOccupationDetails(card) {
+    let jobTitle = null;
+    let company  = null;
+    let school   = null;
+
+    // ── Слой 1: componentKey-секции ──
+    // Ищем div с атрибутом componentKey (атрибут нечувствителен к регистру в querySelector)
+    const sections = card.querySelectorAll('div[componentKey], div[componentkey]');
+
+    for (const section of sections) {
+      const ck = (
+        section.getAttribute('componentKey') ||
+        section.getAttribute('componentkey') || ''
+      );
+
+      const isExp = /ExperienceTopLevelSection/i.test(ck);
+      const isEdu = /EducationTopLevelSection/i.test(ck);
+
+      if (!isExp && !isEdu) continue;
+
+      if (isExp) {
+        // Заголовок секции опыта (должность или учебное заведение как место работы)
+        // Класс из ТЗ: _3f5c8efb ba487acf ... (жирный/основной текст)
+        const titleEl =
+          section.querySelector('p._3f5c8efb.ba487acf') ||
+          section.querySelector('[class*="t-bold"]') ||
+          section.querySelector('[class*="title"]');
+
+        if (titleEl && !jobTitle) {
+          const t = cleanText(titleEl);
+          if (t) {
+            if (isEducationalInstitution(t) && !school) school = t;
+            else jobTitle = t;
+          }
+        }
+
+        // Название компании
+        // Класс из ТЗ: _3f5c8efb dd3e351e ... (вторичный текст)
+        const companyEl =
+          section.querySelector('p._3f5c8efb.dd3e351e') ||
+          section.querySelector('[class*="subtitle"]');
+
+        if (companyEl && !company) {
+          const c = cleanText(companyEl);
+          if (c) company = c;
+        }
+      }
+
+      if (isEdu) {
+        // Учебное заведение
+        const schoolEl =
+          section.querySelector('p._3f5c8efb.ba487acf') ||
+          section.querySelector('[class*="t-bold"]');
+
+        if (schoolEl && !school) {
+          const s = cleanText(schoolEl);
+          if (s) school = s;
+        }
+      }
+    }
+
+    // ── Слой 2: occupation/subtitle строка (fallback) ──
+    // Если слой 1 ничего не дал — парсим простую строку из карточки
+    if (!jobTitle && !company && !school) {
+      const occupationEl =
+        card.querySelector('.mn-connection-card__occupation') ||
+        card.querySelector('[class*="occupation"]')           ||
+        card.querySelector('[class*="subtitle"]')             ||
+        card.querySelector('.entity-result__primary-subtitle')||
+        card.querySelector('[class*="t-14"][class*="t-black"]');
+
+      if (occupationEl) {
+        const parsed = parseOccupationString(cleanText(occupationEl));
+        jobTitle = parsed.jobTitle;
+        company  = parsed.company;
+        school   = parsed.school;
+      }
+    }
+
+    return {
+      jobTitle: jobTitle || null,
+      company:  company  || null,
+      school:   school   || null
+    };
+  }
+
+  // ── DOM: ссылки и контакты ────────────────────────────────────────────────
 
   function findProfileLinks() {
     const links = [];
@@ -174,10 +307,15 @@
     return links;
   }
 
+  /**
+   * Извлекает контакт из ссылки-профиля.
+   * Теперь возвращает расширенный объект: profileUrl, fullName, jobTitle, company, school.
+   */
   function extractContact(link) {
     const profileUrl = normalizeProfileUrl(link.getAttribute('href'));
     if (!profileUrl) return null;
 
+    // ── Имя ──
     let fullName = nameFromAriaLabel(link.getAttribute('aria-label'));
 
     if (!fullName) {
@@ -201,7 +339,14 @@
     if (!fullName) fullName = cleanText(link);
     if (!fullName || fullName.length < 2) return null;
     if (/^(linkedin|view|see|connect|follow|profile|\d+|message|more|open)$/i.test(fullName)) return null;
-    return { profileUrl, fullName };
+
+    // ── Occupation: jobTitle, company, school ──
+    const card = link.closest('li, [class*="card"], [class*="result"], [class*="entity"]') || link.parentElement;
+    const { jobTitle, company, school } = card
+      ? extractOccupationDetails(card)
+      : { jobTitle: null, company: null, school: null };
+
+    return { profileUrl, fullName, jobTitle, company, school };
   }
 
   function harvestNewContacts() {
@@ -235,18 +380,14 @@
     });
   }
 
-  // ── ETA через TIME_PER_10 ─────────────────────────────────────────────────
+  // ── ETA ───────────────────────────────────────────────────────────────────
 
-  /**
-   * Рассчитывает начальное количество секунд исходя из total.
-   * Формула: Math.ceil(total / 10) * TIME_PER_10
-   */
   function calcInitialSeconds(total) {
     if (!total || total <= 0) return null;
     return Math.ceil(total / 10) * TIME_PER_10;
   }
 
-  // ── Progress ──────────────────────────────────────────────────────────────
+  // ── Прогресс ──────────────────────────────────────────────────────────────
 
   async function reportProgress(collected, total, phase, remainingSeconds = null, contacts = null) {
     let percent;
@@ -288,18 +429,15 @@
   // ── Главный цикл ──────────────────────────────────────────────────────────
 
   async function runSync(token) {
-    console.log('[CRM] ══ Синхронизация v1.3 запущена ══');
+    console.log('[CRM] ══ Синхронизация v1.4 запущена ══');
     startHeartbeat();
     _cachedScrollContainer = null;
 
-    let allContacts    = [];
-    let total          = null;
-    let emptyCycles    = 0;
-    let confirmLeft    = 0;
-
-    // Оставшееся время в секундах — инициализируется когда узнаём total
+    let allContacts      = [];
+    let total            = null;
+    let emptyCycles      = 0;
+    let confirmLeft      = 0;
     let remainingSeconds = null;
-    // Последний пройденный порог кратный 10 (для убывания таймера)
     let lastMilestone    = 0;
 
     if (findProfileLinks().length === 0) {
@@ -313,7 +451,6 @@
     total = getTotalFromHeader();
     findScrollContainer();
 
-    // Инициализируем таймер как только узнали total
     if (total) {
       remainingSeconds = calcInitialSeconds(total);
       console.log(`[CRM] ⏱ Начальный таймер: ${remainingSeconds}с для ${total} контактов`);
@@ -326,7 +463,6 @@
       pollForTotal(token).then(found => {
         if (found && !token.cancelled) {
           total = found;
-          // Инициализируем таймер если ещё не был установлен
           if (remainingSeconds === null) {
             remainingSeconds = calcInitialSeconds(found);
             console.log(`[CRM] ⏱ Polling total: ${found}, таймер: ${remainingSeconds}с`);
@@ -338,7 +474,10 @@
     while (true) {
       if (token.cancelled) { await onStopped(allContacts, total); return; }
 
+      // ── Условия остановки ──
+
       if (total !== null && allContacts.length >= total) {
+        // Собрали всё или больше
         if (confirmLeft < CFG.confirmScrolls) {
           confirmLeft++;
           console.log(`[CRM] Контрольный скролл ${confirmLeft}/${CFG.confirmScrolls}`);
@@ -366,10 +505,7 @@
         const f = getTotalFromHeader();
         if (f) {
           total = f;
-          // Инициализируем таймер если ещё не был установлен
-          if (remainingSeconds === null) {
-            remainingSeconds = calcInitialSeconds(f);
-          }
+          if (remainingSeconds === null) remainingSeconds = calcInitialSeconds(f);
           console.log(`[CRM] Total в итерации: ${total}`);
         }
       }
@@ -380,19 +516,35 @@
         allContacts.push(...batch);
         emptyCycles = 0;
 
-        // Убываем таймер на каждые 10 собранных контактов
+        // Убываем таймер на каждые 10 контактов
         if (remainingSeconds !== null) {
           const newMilestone = Math.floor(allContacts.length / 10) * 10;
           if (newMilestone > lastMilestone) {
             const steps = (newMilestone - lastMilestone) / 10;
             remainingSeconds = Math.max(0, remainingSeconds - steps * TIME_PER_10);
-            lastMilestone = newMilestone;
-            console.log(`[CRM] ⏱ Порог ${newMilestone}: осталось ${remainingSeconds}с`);
+            lastMilestone    = newMilestone;
           }
         }
 
         const pct = total ? `${Math.round(allContacts.length / total * 100)}%` : '?%';
-        console.log(`[CRM] +${batch.length} | ${allContacts.length}${total ? `/${total}` : ''} (${pct}) ETA=${remainingSeconds ?? '?'}с`);
+        console.log(`[CRM] +${batch.length} | ${allContacts.length}${total ? `/${total}` : ''} (${pct})`);
+
+        // ── ✅ ИСПРАВЛЕНИЕ: завершение при остатке < nearEndThreshold ──
+        // Когда до total осталось < 10 контактов — LinkedIn уже не будет подгружать
+        // новые карточки (лента закончилась). Делаем финальный harvest и выходим.
+        if (total !== null && (total - allContacts.length) < CFG.nearEndThreshold && (total - allContacts.length) >= 0) {
+          console.log(`[CRM] Остаток < ${CFG.nearEndThreshold} — финальный проход`);
+          // Короткая пауза и один финальный сбор
+          await new Promise(r => setTimeout(r, 1200));
+          const finalBatch = harvestNewContacts();
+          if (finalBatch.length > 0) {
+            allContacts.push(...finalBatch);
+            console.log(`[CRM] Финальный урожай: +${finalBatch.length}`);
+          }
+          console.log(`[CRM] ✓ Завершаем (собрано ${allContacts.length} из ${total})`);
+          break;
+        }
+
         await reportProgress(allContacts.length, total, 'running', remainingSeconds, allContacts);
       } else {
         emptyCycles++;
@@ -401,6 +553,7 @@
       }
     }
 
+    // ── Финал ──
     stopHeartbeat();
     isRunning = false;
 
@@ -410,7 +563,7 @@
       crm_sync_total:       total,
       crm_sync_percent:     100,
       crm_sync_label:       total ? `Собрано ${allContacts.length} из ${total}` : `Собрано ${allContacts.length}`,
-      crm_sync_eta_seconds: null, // завершено — ETA не нужен
+      crm_sync_eta_seconds: null,   // завершено — ETA скрываем
       crm_sync_phase:       'done',
       crm_sync_status:      'done',
       crm_sync_command:     null
@@ -449,7 +602,6 @@
     isRunning              = true;
     currentToken           = makeStopToken();
 
-    // Сбрасываем всё перед стартом
     chrome.storage.local.set({
       crm_sync_status:      'running',
       crm_sync_phase:       'scrolling',
@@ -474,6 +626,8 @@
     currentToken.cancelled = true;
   }
 
+  // ── Команды ───────────────────────────────────────────────────────────────
+
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.crm_sync_command) return;
     const cmd = changes.crm_sync_command.newValue;
@@ -491,6 +645,6 @@
 
   if (chrome.runtime?.id) chrome.runtime.sendMessage({ type: 'CONTENT_READY' }).catch(() => {});
 
-  console.log('[CRM] content.js v1.3 готов');
+  console.log('[CRM] content.js v1.4 готов');
 
 })();
