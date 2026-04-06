@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LinkedIn CRM",
   "description": "LinkedIn CRM — автоматический сбор контактов из LinkedIn Connections.",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "icons": {
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
@@ -10,15 +10,24 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["tabs", "notifications", "storage", "scripting"],
-  "host_permissions": ["https://www.linkedin.com/*"],
+  "permissions": [
+    "tabs",
+    "notifications",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*"
+  ],
   "content_scripts": [
     {
       "matches": [
         "https://www.linkedin.com/mynetwork/invite-connect/connections/",
         "https://www.linkedin.com/mynetwork/invite-connect/connections/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

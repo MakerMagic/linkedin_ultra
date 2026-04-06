@@ -1,20 +1,12 @@
 /**
- * dashboard.js — LinkedIn CRM v1.5
- *
- * Изменения:
- *   1. При status=done: кнопка «Начать заново», btnStop disabled
- *   2. Confirmation modal перед restart
- *   3. Restart: вызов RESTART_SYNC в background, потом START_SYNC
+ * dashboard.js — LinkedIn CRM v2.0
+ * State machine UI + restart modal + TSV export (Name,URL,JobTitle,Company,School)
  */
 (function () {
   'use strict';
 
   const CIRCUMFERENCE      = 2 * Math.PI * 52;
   const HEARTBEAT_STALE_MS = 15_000;
-
-  // ── DOM ───────────────────────────────────────────────────────────────────
-  const navButtons = document.querySelectorAll('.nav__item[data-nav]:not([disabled])');
-  const panels     = document.querySelectorAll('.main-panel[data-panel]');
 
   const arc        = document.getElementById('progressArc');
   const pctEl      = document.getElementById('progressPercent');
@@ -25,377 +17,198 @@
   const btnStart   = document.getElementById('btnStart');
   const btnStop    = document.getElementById('btnStop');
   const btnCSV     = document.getElementById('btnDownloadCSV');
-
-  // Modal
-  const restartModal   = document.getElementById('restartModal');
+  const restartModal    = document.getElementById('restartModal');
   const btnModalConfirm = document.getElementById('btnModalConfirm');
   const btnModalCancel  = document.getElementById('btnModalCancel');
+  const navButtons = document.querySelectorAll('.nav__item[data-nav]:not([disabled])');
+  const panels     = document.querySelectorAll('.main-panel[data-panel]');
 
-  // ── Навигация ─────────────────────────────────────────────────────────────
-
+  // Навигация
   function setActiveView(viewId) {
     navButtons.forEach(btn => {
-      const id = btn.getAttribute('data-nav');
-      const active = id === viewId;
+      const id = btn.getAttribute('data-nav'), active = id === viewId;
       btn.classList.toggle('nav__item--active', active);
       active ? btn.setAttribute('aria-current', 'page') : btn.removeAttribute('aria-current');
     });
-    panels.forEach(p => {
-      p.classList.toggle('main-panel--active', p.getAttribute('data-panel') === viewId);
-    });
+    panels.forEach(p => p.classList.toggle('main-panel--active', p.getAttribute('data-panel') === viewId));
     document.title = viewId === 'search' ? 'LinkedIn CRM — Поиск' : 'LinkedIn CRM — Синхронизация';
   }
+  navButtons.forEach(btn => btn.addEventListener('click', () => { const id = btn.getAttribute('data-nav'); if (id) setActiveView(id); }));
+  document.querySelectorAll('[data-go-sync]').forEach(el => el.addEventListener('click', e => { e.preventDefault(); setActiveView('sync'); }));
 
-  navButtons.forEach(btn => btn.addEventListener('click', () => {
-    const id = btn.getAttribute('data-nav');
-    if (id) setActiveView(id);
-  }));
-
-  document.querySelectorAll('[data-go-sync]').forEach(el => {
-    el.addEventListener('click', e => { e.preventDefault(); setActiveView('sync'); });
-  });
-
-  // ── Кольцо прогресса ──────────────────────────────────────────────────────
-
+  // Кольцо
   function setRingProgress(pct) {
     const p = Math.max(0, Math.min(100, pct));
-    if (arc) {
-      arc.style.strokeDasharray  = String(CIRCUMFERENCE);
-      arc.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - p / 100));
-    }
+    if (arc) { arc.style.strokeDasharray = String(CIRCUMFERENCE); arc.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - p / 100)); }
     if (pctEl) pctEl.textContent = String(Math.round(p));
   }
 
-  // ── ETA форматирование ────────────────────────────────────────────────────
-
-  function formatEta(seconds) {
-    if (seconds === null || seconds === undefined || seconds < 0) return null;
-    if (seconds < 60) return `~${Math.max(1, Math.round(seconds))} сек`;
-    const mins = Math.round(seconds / 60);
-    if (mins < 60) return `~${mins} мин`;
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return m > 0 ? `~${h} ч ${m} мин` : `~${h} ч`;
+  // ETA
+  function formatEta(s) {
+    if (s === null || s === undefined || s < 0) return null;
+    if (s < 60) return '~' + Math.max(1, Math.round(s)) + ' сек';
+    const m = Math.round(s / 60);
+    if (m < 60) return '~' + m + ' мин';
+    const h = Math.floor(m / 60), rm = m % 60;
+    return rm > 0 ? '~' + h + ' ч ' + rm + ' мин' : '~' + h + ' ч';
   }
 
-  // ── Применение состояния ──────────────────────────────────────────────────
-
+  // State machine -> UI
   function applyState(status, phase, count, percent, total, label, etaSeconds) {
-    const running     = status === 'running';
-    const isDone      = status === 'done';
-    const hasContacts = count > 0;
+    const running = status === 'running', isDone = status === 'done', hasContacts = count > 0;
 
-    // Кнопка «Начать»
+    // btnStart
     if (btnStart) {
       btnStart.disabled = running;
-
-      if (isDone) {
-        // Завершено → «Начать заново»
-        btnStart.textContent = 'Начать заново';
-      } else if (hasContacts && !running && status === 'stopped') {
-        btnStart.textContent = 'Продолжить синхронизацию';
-      } else {
-        btnStart.textContent = 'Начать синхронизацию';
-      }
+      btnStart.textContent = isDone ? 'Начать заново'
+        : (status === 'stopped' && hasContacts ? 'Продолжить синхронизацию' : 'Начать синхронизацию');
     }
 
-    // Кнопка «Остановить» — disabled при 100% (done) и при idle
-    if (btnStop) {
-      btnStop.disabled = !running || isDone;
-    }
+    // btnStop — disabled всегда кроме running
+    if (btnStop) btnStop.disabled = !running;
+    if (btnCSV)  btnCSV.disabled  = !hasContacts;
 
-    // Кнопка CSV
-    if (btnCSV) btnCSV.disabled = !hasContacts;
+    if (countEl) countEl.textContent = label || (total ? count + ' / ' + total : String(count));
 
-    // Счётчик
-    if (countEl) {
-      countEl.textContent = label || (total ? `${count} / ${total}` : String(count));
-    }
-
-    // ETA — только во время синхронизации, когда total известен и собрано >= 10
+    // ETA — только running + total известен + >=10 собрано
     if (etaEl && etaTextEl) {
       const showEta = running && total && count >= 10 && etaSeconds !== null;
       const etaStr  = showEta ? formatEta(etaSeconds) : null;
-      if (etaStr) {
-        etaTextEl.textContent = `осталось ${etaStr}`;
-        etaEl.hidden = false;
-      } else {
-        etaEl.hidden = true;
-      }
+      if (etaStr) { etaTextEl.textContent = 'осталось ' + etaStr; etaEl.hidden = false; }
+      else etaEl.hidden = true;
     }
 
-    // Статус
-    let statusText;
-    if (status === 'running') {
-      statusText = 'Сбор контактов…';
-    } else {
-      statusText = ({
-        idle:    'Ожидание запуска',
-        done:    'Завершено ✓',
-        stopped: 'Остановлено',
-        error:   'Ошибка — смотри консоль LinkedIn'
-      })[status] || 'Ожидание запуска';
+    if (statusEl) {
+      statusEl.textContent = ({idle:'Ожидание запуска',running:'Сбор контактов…',stopped:'Остановлено',done:'Завершено ✓',error:'Ошибка — смотри консоль LinkedIn'})[status] || 'Ожидание запуска';
     }
-    if (statusEl) statusEl.textContent = statusText;
 
-    // Кольцо
     setRingProgress(status === 'idle' ? 0 : percent);
   }
 
-  // ── Инициализация ─────────────────────────────────────────────────────────
+  // Инициализация
+  const ALL_KEYS = ['crm_sync_status','crm_sync_phase','crm_sync_count','crm_sync_percent','crm_sync_total','crm_sync_label','crm_sync_eta_seconds','crm_heartbeat'];
 
-  const ALL_KEYS = [
-    'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
-    'crm_sync_percent', 'crm_sync_total', 'crm_sync_label',
-    'crm_sync_eta_seconds', 'crm_heartbeat'
-  ];
-
-  async function loadAndApplyState() {
-    return new Promise(resolve => {
-      chrome.storage.local.get(ALL_KEYS, data => {
-        let status    = data.crm_sync_status     || 'idle';
-        const phase   = data.crm_sync_phase      || '';
-        const count   = data.crm_sync_count      || 0;
-        const percent = data.crm_sync_percent    || 0;
-        const total   = data.crm_sync_total      || null;
-        const label   = data.crm_sync_label      || '';
-        const eta     = data.crm_sync_eta_seconds ?? null;
-        const hb      = data.crm_heartbeat       || 0;
-
-        if (status === 'running' && Date.now() - hb > HEARTBEAT_STALE_MS) {
-          status = 'idle';
-          chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
-        }
-
-        applyState(status, phase, count, percent, total, label, eta);
-        resolve();
-      });
+  function loadAndApplyState() {
+    chrome.storage.local.get(ALL_KEYS, function(data) {
+      var status = data.crm_sync_status || 'idle';
+      if (status === 'running' && Date.now() - (data.crm_heartbeat||0) > HEARTBEAT_STALE_MS) {
+        status = 'idle';
+        chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
+      }
+      applyState(status, data.crm_sync_phase||'', data.crm_sync_count||0, data.crm_sync_percent||0, data.crm_sync_total||null, data.crm_sync_label||'', data.crm_sync_eta_seconds!=null?data.crm_sync_eta_seconds:null);
     });
   }
+  loadAndApplyState();
 
-  void loadAndApplyState();
-
-  chrome.storage.onChanged.addListener((changes, area) => {
+  chrome.storage.onChanged.addListener(function(changes, area) {
     if (area !== 'local') return;
-    const relevant = [
-      'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
-      'crm_sync_percent', 'crm_sync_total', 'crm_sync_label', 'crm_sync_eta_seconds'
-    ];
-    if (!relevant.some(k => k in changes)) return;
-
-    chrome.storage.local.get(ALL_KEYS, data => applyState(
-      data.crm_sync_status     || 'idle',
-      data.crm_sync_phase      || '',
-      data.crm_sync_count      || 0,
-      data.crm_sync_percent    || 0,
-      data.crm_sync_total      || null,
-      data.crm_sync_label      || '',
-      data.crm_sync_eta_seconds ?? null
-    ));
+    var relevant = ['crm_sync_status','crm_sync_phase','crm_sync_count','crm_sync_percent','crm_sync_total','crm_sync_label','crm_sync_eta_seconds'];
+    if (!relevant.some(function(k){ return k in changes; })) return;
+    chrome.storage.local.get(ALL_KEYS, function(data) {
+      applyState(data.crm_sync_status||'idle', data.crm_sync_phase||'', data.crm_sync_count||0, data.crm_sync_percent||0, data.crm_sync_total||null, data.crm_sync_label||'', data.crm_sync_eta_seconds!=null?data.crm_sync_eta_seconds:null);
+    });
   });
 
-  // ── Modal ─────────────────────────────────────────────────────────────────
+  // Modal
+  function showModal() { if (restartModal) restartModal.hidden = false; }
+  function hideModal() { if (restartModal) restartModal.hidden = true; }
+  if (restartModal) restartModal.addEventListener('click', function(e){ if (e.target===restartModal) hideModal(); });
+  if (btnModalCancel)  btnModalCancel.addEventListener('click',  hideModal);
+  if (btnModalConfirm) btnModalConfirm.addEventListener('click', async function(){ hideModal(); await performRestart(); });
+  document.addEventListener('keydown', function(e){ if (e.key==='Escape' && restartModal && !restartModal.hidden) hideModal(); });
 
-  function showRestartModal() {
-    if (restartModal) restartModal.hidden = false;
-  }
-
-  function hideRestartModal() {
-    if (restartModal) restartModal.hidden = true;
-  }
-
-  // Закрываем по клику на backdrop (не на сам box)
-  if (restartModal) {
-    restartModal.addEventListener('click', e => {
-      if (e.target === restartModal) hideRestartModal();
-    });
-  }
-
-  if (btnModalCancel) btnModalCancel.addEventListener('click', hideRestartModal);
-
-  if (btnModalConfirm) {
-    btnModalConfirm.addEventListener('click', async () => {
-      hideRestartModal();
-      await performRestart();
-    });
-  }
-
-  // Закрытие по Escape
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && restartModal && !restartModal.hidden) {
-      hideRestartModal();
-    }
-  });
-
-  // ── Restart ───────────────────────────────────────────────────────────────
-
-  /**
-   * 1. Просим background сбросить storage и перезагрузить вкладку LinkedIn.
-   * 2. Ждём небольшой паузы (страница грузится).
-   * 3. Запускаем синхронизацию заново.
-   */
+  // Restart
   async function performRestart() {
     if (statusEl) statusEl.textContent = 'Сброс данных…';
     if (btnStart) btnStart.disabled = true;
-
-    await new Promise(resolve => {
-      chrome.runtime.sendMessage({ type: 'RESTART_SYNC' }, response => {
-        if (chrome.runtime.lastError) {
-          console.warn('[CRM Dashboard] RESTART_SYNC ошибка:', chrome.runtime.lastError.message);
-        }
+    await new Promise(function(resolve){
+      chrome.runtime.sendMessage({ type: 'RESTART_SYNC' }, function(response){
+        if (chrome.runtime.lastError) console.warn('[CRM] RESTART_SYNC:', chrome.runtime.lastError.message);
         resolve();
       });
     });
-
-    // Ждём пока вкладка LinkedIn перезагрузится и content.js поднимется
     if (statusEl) statusEl.textContent = 'Перезагрузка LinkedIn…';
-    await new Promise(r => setTimeout(r, 4000));
-
-    // Запускаем синхронизацию
+    await new Promise(function(r){ setTimeout(r, 4000); });
     await handleStart();
   }
 
-  // ── Кнопка «Начать» / «Начать заново» ────────────────────────────────────
-
+  // handleStart
   async function handleStart() {
     if (btnStart) btnStart.disabled = true;
     if (statusEl) statusEl.textContent = 'Подключение к LinkedIn…';
-
-    const ok = await new Promise(resolve => {
-      chrome.runtime.sendMessage({ type: 'ENSURE_CONTENT_SCRIPT' }, response => {
+    var ok = await new Promise(function(resolve){
+      chrome.runtime.sendMessage({ type: 'ENSURE_CONTENT_SCRIPT' }, function(response){
         if (chrome.runtime.lastError) { resolve(true); return; }
-        resolve(response?.ok !== false);
+        resolve(response && response.ok !== false);
       });
     });
-
     if (!ok) {
       if (statusEl) statusEl.textContent = 'Ошибка: откройте вкладку LinkedIn Connections';
       if (btnStart) btnStart.disabled = false;
       return;
     }
-
     chrome.storage.local.set({ crm_sync_command: 'start', crm_sync_status: 'running' });
   }
 
   if (btnStart) {
-    btnStart.addEventListener('click', () => {
-      // Читаем текущий статус чтобы понять — это restart или обычный старт
-      chrome.storage.local.get(['crm_sync_status'], data => {
-        const status = data.crm_sync_status || 'idle';
-        if (status === 'done') {
-          // Показываем confirmation modal
-          showRestartModal();
-        } else {
-          void handleStart();
-        }
+    btnStart.addEventListener('click', function(){
+      chrome.storage.local.get(['crm_sync_status'], function(data){
+        if ((data.crm_sync_status||'idle') === 'done') showModal();
+        else handleStart();
       });
     });
   }
 
-  if (btnStop) {
-    btnStop.addEventListener('click', () => {
-      chrome.storage.local.set({ crm_sync_command: 'stop' });
-    });
-  }
+  if (btnStop) btnStop.addEventListener('click', function(){ chrome.storage.local.set({ crm_sync_command: 'stop' }); });
 
-  // ── CSV экспорт — 5 колонок ───────────────────────────────────────────────
-
-  function downloadCSV(contacts) {
-    if (!contacts?.length) return;
-
-    const esc = v => {
-      const s = String(v ?? '').replace(/\r?\n/g, ' ');
-      if (s.includes(',') || s.includes('"')) {
-        return `"${s.replace(/"/g, '""')}"`;
-      }
-      return s;
-    };
-
-    const lines = [
-      'Name,URL,Job Title,Company,School',
-      ...contacts.map(c => [
-        esc(c.fullName   ?? ''),
-        esc(c.profileUrl ?? ''),
-        esc(c.jobTitle   ?? ''),
-        esc(c.company    ?? ''),
-        esc(c.school     ?? '')
-      ].join(','))
-    ];
-
-    const content = '\uFEFF' + lines.join('\r\n');
-    const blob    = new Blob([content], { type: 'text/csv;charset=utf-8' });
-    const url     = URL.createObjectURL(blob);
-
-    const a = Object.assign(document.createElement('a'), {
-      href:     url,
-      download: `linkedin_contacts_${new Date().toISOString().slice(0, 10)}.csv`,
-      style:    'display:none'
-    });
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  // TSV export
+  function downloadTSV(contacts) {
+    if (!contacts || !contacts.length) return;
+    function clean(v){ return String(v||'').replace(/\t/g,' ').replace(/\r?\n/g,' '); }
+    var lines = [['Name','URL','Job Title','Company','School'].join('\t')].concat(
+      contacts.map(function(c){ return [clean(c.fullName),clean(c.profileUrl),clean(c.jobTitle),clean(c.company),clean(c.school)].join('\t'); })
+    );
+    var blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/tab-separated-values;charset=utf-8' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = 'linkedin_contacts_' + new Date().toISOString().slice(0,10) + '.tsv'; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
   }
 
   if (btnCSV) {
-    btnCSV.addEventListener('click', () => {
-      chrome.storage.local.get(['crm_contacts'], data => {
-        const contacts = data.crm_contacts || [];
+    btnCSV.addEventListener('click', function(){
+      chrome.storage.local.get(['crm_contacts'], function(data){
+        var contacts = data.crm_contacts || [];
         if (!contacts.length) { alert('Нет контактов. Запустите синхронизацию.'); return; }
-        downloadCSV(contacts);
+        downloadTSV(contacts);
       });
     });
   }
 
-  // ── Поиск: отрасли ────────────────────────────────────────────────────────
-
-  const INDUSTRY_OPTIONS = [
-    { id: 'finance',         label: 'Финансы' },
-    { id: 'consulting',      label: 'Консалтинг' },
-    { id: 'tech',            label: 'Технологии' },
-    { id: 'ai_ml',           label: 'AI / ML' },
-    { id: 'healthcare',      label: 'Медицина' },
-    { id: 'energy',          label: 'Энергетика' },
-    { id: 'consumer',        label: 'Потребительский' },
-    { id: 'industrial',      label: 'Промышленность' },
-    { id: 'real_estate',     label: 'Недвижимость' },
-    { id: 'media',           label: 'Медиа' },
-    { id: 'education',       label: 'Образование' },
-    { id: 'venture_capital', label: 'Венчур' },
-    { id: 'government',      label: 'Госсектор' },
-    { id: 'other',           label: 'Другое' }
+  // Поиск: отрасли
+  var INDUSTRY_OPTIONS = [
+    {id:'finance',label:'Финансы'},{id:'consulting',label:'Консалтинг'},{id:'tech',label:'Технологии'},
+    {id:'ai_ml',label:'AI / ML'},{id:'healthcare',label:'Медицина'},{id:'energy',label:'Энергетика'},
+    {id:'consumer',label:'Потребительский'},{id:'industrial',label:'Промышленность'},{id:'real_estate',label:'Недвижимость'},
+    {id:'media',label:'Медиа'},{id:'education',label:'Образование'},{id:'venture_capital',label:'Венчур'},
+    {id:'government',label:'Госсектор'},{id:'other',label:'Другое'}
   ];
-
-  const industryRoot  = document.getElementById('industryTags');
-  const keywordsInput = document.getElementById('searchKeywords');
-
+  var industryRoot  = document.getElementById('industryTags');
+  var keywordsInput = document.getElementById('searchKeywords');
   if (industryRoot) {
-    INDUSTRY_OPTIONS.forEach(({ id, label }) => {
-      const wrap = document.createElement('label');
-      wrap.className = 'tag-select__item';
-      const input = Object.assign(document.createElement('input'), {
-        type: 'checkbox', className: 'tag-select__input', value: id
-      });
-      input.setAttribute('data-industry', id);
-      const pill = Object.assign(document.createElement('span'), {
-        className: 'tag-select__pill', textContent: label
-      });
-      wrap.append(input, pill);
-      industryRoot.appendChild(wrap);
+    INDUSTRY_OPTIONS.forEach(function(opt){
+      var wrap = document.createElement('label'); wrap.className = 'tag-select__item';
+      var input = document.createElement('input'); input.type = 'checkbox'; input.className = 'tag-select__input'; input.value = opt.id; input.setAttribute('data-industry', opt.id);
+      var pill  = document.createElement('span');  pill.className = 'tag-select__pill'; pill.textContent = opt.label;
+      wrap.appendChild(input); wrap.appendChild(pill); industryRoot.appendChild(wrap);
     });
   }
-
-  const btnSearch = document.getElementById('btnSearch');
+  var btnSearch = document.getElementById('btnSearch');
   if (btnSearch) {
-    btnSearch.addEventListener('click', () => {
-      const industries = industryRoot
-        ? Array.from(industryRoot.querySelectorAll('input:checked')).map(el => el.value)
-        : [];
-      console.log('[CRM Dashboard] Search payload:', {
-        schemaVersion: 1,
-        keywords: { raw: keywordsInput?.value.trim() || '', semantic: null },
-        industries
-      });
+    btnSearch.addEventListener('click', function(){
+      var industries = industryRoot ? Array.from(industryRoot.querySelectorAll('input:checked')).map(function(el){ return el.value; }) : [];
+      console.log('[CRM Dashboard] Search payload:', { schemaVersion:1, keywords:{ raw: keywordsInput ? keywordsInput.value.trim() : '', semantic:null }, industries:industries });
     });
   }
 
