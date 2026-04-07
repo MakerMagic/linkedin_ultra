@@ -76,15 +76,11 @@
 
               <div class="sync-meta">
                 <p id="syncStatus" class="sync-status">Ожидание запуска</p>
-
-                <!-- Счётчик: "Собрано 347 из 1234" — целиком из content.js -->
                 <p id="syncCount" class="sync-counter__value">0</p>
 
-                <!-- ETA: появляется только во время синхронизации когда total известен -->
                 <p id="syncEta" class="sync-eta" hidden>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                   </svg>
                   <span id="syncEtaText"></span>
                 </p>
@@ -100,13 +96,63 @@
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    Скачать Excel
+                    Скачать CSV
                   </button>
-                  <p class="sync-hint">Файл .xls открывается в Excel — Profile URL и Full Name в отдельных колонках.</p>
+                  <p class="sync-hint">Name · URL · Job Title · Company · School</p>
                 </div>
               </div>
             </div>
           </section>
+
+          <!-- ── Split screen подсказка ── -->
+          <!--
+            БАГ 4 UX: блок с советом использовать split screen.
+            Иконка "?" при hover показывает popover с видео-инструкцией.
+          -->
+          <div class="splitscreen-tip" id="splitscreenTip">
+            <svg class="splitscreen-tip__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>
+            </svg>
+            <span class="splitscreen-tip__text">
+              Переместите эту вкладку в split screen — синхронизация будет работать в фоне
+            </span>
+
+            <!-- Кнопка "?" с popover видео -->
+            <div class="splitscreen-help" id="splitscreenHelp">
+              <button type="button" class="splitscreen-help__btn" aria-label="Как сделать split screen" aria-expanded="false" id="splitscreenHelpBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                  <path d="M12 17h.01"/>
+                </svg>
+              </button>
+
+              <!-- Popover с видео -->
+              <div class="splitscreen-help__popover" id="splitscreenPopover" hidden role="tooltip">
+                <p class="splitscreen-help__title">Как открыть split screen</p>
+                <!--
+                  ВИДЕО ИНСТРУКЦИЯ:
+                  Вставьте ссылку на видео в переменную HELP_VIDEO_URL в dashboard.js
+                  id="w4m9qx" — оставьте этот id для идентификации элемента
+                  autoplay + loop + muted + без controls
+                -->
+                <video
+                  id="w4m9qx"
+                  class="splitscreen-help__video"
+                  autoplay
+                  loop
+                  muted
+                  playsinline
+                  disablePictureInPicture
+                >
+                  <!-- src устанавливается из dashboard.js через HELP_VIDEO_URL -->
+                  <source id="w4m9qxSrc" src="" type="video/mp4">
+                  Ваш браузер не поддерживает видео.
+                </video>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <!-- ── Вкладка 2: Поиск ── -->
@@ -157,6 +203,19 @@
 
       </main>
     </div>
+
+    <!-- Confirmation modal (restart) -->
+    <div id="restartModal" class="modal-backdrop" hidden aria-modal="true" role="dialog" aria-labelledby="modalTitle">
+      <div class="modal-box glass">
+        <h2 id="modalTitle" class="modal-title">Начать заново?</h2>
+        <p class="modal-text">Все собранные контакты будут удалены.<br>Синхронизация запустится с начала.</p>
+        <div class="modal-actions">
+          <button type="button" id="btnModalConfirm" class="btn btn--primary">Да, начать заново</button>
+          <button type="button" id="btnModalCancel"  class="btn btn--ghost">Нет</button>
+        </div>
+      </div>
+    </div>
+
     <script src="dashboard.js"></script>
   </body>
 </html>

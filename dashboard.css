@@ -370,3 +370,118 @@ html,body {
 
 /* Скрытый элемент через атрибут hidden */
 .sync-eta[hidden] { display: none; }
+
+/* ── Confirmation Modal ── */
+
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(11,15,26,.75); backdrop-filter: blur(6px);
+  animation: modal-in .2s ease;
+}
+.modal-backdrop[hidden] { display: none; }
+@keyframes modal-in { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-box {
+  width: min(420px,90vw); padding: 32px 36px;
+  display: flex; flex-direction: column; gap: 16px;
+  animation: modal-box-in .2s ease;
+}
+@keyframes modal-box-in {
+  from { opacity:0; transform: translateY(-12px) scale(.97); }
+  to   { opacity:1; transform: translateY(0) scale(1); }
+}
+
+.modal-title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+.modal-text  { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+.modal-actions { display: flex; gap: 12px; padding-top: 8px; }
+
+/* ── Split Screen подсказка ── */
+
+.splitscreen-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(99,102,241,.07);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.splitscreen-tip__icon {
+  flex-shrink: 0;
+  color: var(--accent);
+  opacity: .8;
+}
+
+.splitscreen-tip__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Контейнер кнопки "?" с popover */
+.splitscreen-help {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.splitscreen-help__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.06);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .2s, background .2s, border-color .2s;
+}
+
+.splitscreen-help__btn:hover,
+.splitscreen-help__btn[aria-expanded="true"] {
+  color: var(--text);
+  background: rgba(255,255,255,.12);
+  border-color: rgba(99,102,241,.4);
+}
+
+/* Popover с видео */
+.splitscreen-help__popover {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 12px);
+  right: 0;
+  width: 300px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(18,26,43,.97);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+
+.splitscreen-help__popover[hidden] { display: none; }
+
+.splitscreen-help__title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+}
+
+.splitscreen-help__video {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  background: rgba(0,0,0,.4);
+  /* Курсор pointer убран — видео без controls, без паузы */
+  pointer-events: none;
+}

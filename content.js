@@ -1,28 +1,17 @@
 /**
- * content.js — LinkedIn CRM v2.0
+ * content.js — LinkedIn CRM v2.1
  *
  * Исправлено:
  *
- *   БАГ 1 — Автозапуск:
- *     Убран безусловный автостарт по crm_sync_command.
- *     Автовосстановление ТОЛЬКО если: status='running' И heartbeat свежий (<30s).
- *     В остальных случаях — команда сбрасывается, ждём явного нажатия.
+ *   БАГ 2 — Дублирование после pause/resume:
+ *     При startSync() полностью сбрасываем seenUrls И все счётчики.
+ *     Добавлен syncSessionId — уникальный ID сессии.
+ *     enrichBatch игнорирует ответы от устаревших сессий.
  *
- *   БАГ 2 — Дублирование:
- *     startSync() проверяет isRunning — двойной запуск невозможен.
- *     enrichBatch не вызывается если токен уже отменён.
- *
- *   БАГ 3 — Потеря контактов:
- *     harvestNewContacts добавляет ВСЕ видимые ссылки в seenUrls.
- *     enrichBatch при стопе возвращает хвост без обогащения (данные сохраняются).
- *
- *   БАГ 4 — Остановка:
- *     stopSync() отменяет токен → каждый await в цикле проверяет его.
- *     background.js тоже проверяет command='stop' перед каждым профилем.
- *
- *   ДОПОЛНИТЕЛЬНО:
- *     - При status='done': percent=100, ETA убран, btnStop disabled
- *     - Restart flow в dashboard.js (modal → RESTART_SYNC → reload → start)
+ *   БАГ 3 — Неправильный ETA:
+ *     Новая формула: ETA = scrollTimeRemaining + (total - collected) * SECONDS_PER_PROFILE
+ *     SECONDS_PER_PROFILE = 4 (каждый профиль ~4 сек с учётом загрузки + паузы)
+ *     Обновляется динамически после каждого батча.
  */
 (function () {
   'use strict';
@@ -31,7 +20,10 @@
   // КОНФИГУРАЦИЯ
   // =====================================================================
 
-  const TIME_PER_10 = 2; // секунд на каждые 10 контактов (для ETA)
+  // Среднее время на парсинг одного профиля (загрузка + scraper + пауза)
+  const SECONDS_PER_PROFILE = 4;
+  // Секунд на каждые 10 контактов при скролле (без парсинга профилей)
+  const SCROLL_TIME_PER_10  = 2;
 
   const CFG = {
     scrollPxMin:        400,
@@ -46,20 +38,13 @@
     nearEndThreshold:   10,
     profilePauseMs:     1800,
     enrichBatchSize:    20,
-    autoRestoreMaxAge:  30000  // мс — максимальный возраст heartbeat для автовосстановления
+    autoRestoreMaxAge:  30000
   };
 
   // =====================================================================
   // STATE MACHINE
   // =====================================================================
 
-  /**
-   * Состояние жизненного цикла синхронизации.
-   * idle → running → (done | stopped)
-   *
-   * Единый источник правды для всего модуля.
-   * Скрейпинг МОЖЕТ запускаться ТОЛЬКО из состояния idle.
-   */
   const STATE = {
     IDLE:    'idle',
     RUNNING: 'running',
@@ -99,13 +84,20 @@
   }
 
   // =====================================================================
-  // ГЛОБАЛЬНОЕ СОСТОЯНИЕ МОДУЛЯ
+  // ГЛОБАЛЬНОЕ СОСТОЯНИЕ
   // =====================================================================
 
   let currentToken           = null;
   let heartbeatTimer         = null;
   let seenUrls               = new Set();
   let _cachedScrollContainer = null;
+
+  /**
+   * ✅ БАГ 2 FIX: syncSessionId — уникальный ID текущей сессии.
+   * enrichBatch передаёт его в background; ответы с устаревшим ID отбрасываются.
+   * При каждом startSync() генерируется новый ID → старые async операции игнорируются.
+   */
+  let syncSessionId = 0;
 
   // =====================================================================
   // УТИЛИТЫ
@@ -217,7 +209,7 @@
   }
 
   // =====================================================================
-  // ПОИСК ССЫЛОК И ИЗВЛЕЧЕНИЕ КОНТАКТОВ
+  // DOM: ССЫЛКИ И КОНТАКТЫ
   // =====================================================================
 
   function findProfileLinks() {
@@ -262,17 +254,13 @@
     return { profileUrl, fullName, jobTitle: null, company: null, school: null };
   }
 
-  /**
-   * Собирает ВСЕ новые контакты (не в seenUrls).
-   * Гарантирует что ни один контакт не будет пропущен при следующем скролле.
-   */
   function harvestNewContacts() {
     const fresh = [];
     for (const link of findProfileLinks()) {
       const contact = extractContact(link);
       if (!contact) continue;
       if (seenUrls.has(contact.profileUrl)) continue;
-      seenUrls.add(contact.profileUrl); // добавляем в Set сразу — до обработки
+      seenUrls.add(contact.profileUrl);
       fresh.push(contact);
     }
     return fresh;
@@ -283,29 +271,26 @@
   // =====================================================================
 
   /**
-   * Отправляет batch в background для последовательного profile scraping.
-   *
-   * ✅ БАГ 4 FIX: проверяем token.cancelled ДО отправки.
-   * background.js тоже проверяет stop-команду перед каждым профилем.
-   *
-   * При ошибке — возвращаем исходный batch (данные не теряются).
+   * ✅ БАГ 2 FIX: передаём sessionId в запрос.
+   * Если к моменту ответа сессия сменилась (пользователь остановил и перезапустил)
+   * — результат отбрасывается и возвращается исходный batch.
    */
   function enrichBatch(batch, token) {
     return new Promise(resolve => {
-      // Если стоп — возвращаем как есть, не открываем вкладки
-      if (token.cancelled || !batch.length) {
-        resolve(batch);
-        return;
-      }
+      if (token.cancelled || !batch.length) { resolve(batch); return; }
+      if (!chrome.runtime?.id) { resolve(batch); return; }
 
-      if (!chrome.runtime?.id) {
-        resolve(batch);
-        return;
-      }
+      const sessionAtSend = syncSessionId; // запоминаем ID текущей сессии
 
       chrome.runtime.sendMessage(
         { type: 'ENRICH_CONTACTS', contacts: batch, pauseMs: CFG.profilePauseMs },
         response => {
+          // Если сессия сменилась пока шло обогащение — игнорируем результат
+          if (syncSessionId !== sessionAtSend) {
+            console.log('[CRM] enrichBatch: сессия сменилась — игнорируем устаревший результат');
+            resolve(batch);
+            return;
+          }
           if (chrome.runtime.lastError || !response?.ok) {
             console.warn('[CRM] Обогащение не удалось:', chrome.runtime.lastError?.message);
             resolve(batch);
@@ -341,19 +326,36 @@
   }
 
   // =====================================================================
-  // ETA
+  // ETA — ИСПРАВЛЕННАЯ ФОРМУЛА
   // =====================================================================
 
-  function calcInitialSeconds(total) {
-    if (!total || total <= 0) return null;
-    return Math.ceil(total / 10) * TIME_PER_10;
+  /**
+   * ✅ БАГ 3 FIX: новая формула ETA учитывает время парсинга профилей.
+   *
+   * ETA = scrollTimeRemaining + (total - collected) * SECONDS_PER_PROFILE
+   *
+   * Где:
+   *   scrollTimeRemaining = оставшееся время скролла
+   *     = ((total - collected) / 10) * SCROLL_TIME_PER_10
+   *   (total - collected) * SECONDS_PER_PROFILE = время на парсинг профилей
+   *
+   * Итого:
+   *   ETA ≈ ((remaining / 10) * 2) + (remaining * 4)
+   *   При 100 оставшихся: (10 * 2) + (100 * 4) = 20 + 400 = 420 сек ≈ 7 мин
+   */
+  function calcEtaSeconds(collected, total) {
+    if (!total || total <= 0 || collected >= total) return null;
+    const remaining           = total - collected;
+    const scrollTimeRemaining = Math.ceil(remaining / 10) * SCROLL_TIME_PER_10;
+    const profilesTime        = remaining * SECONDS_PER_PROFILE;
+    return Math.round(scrollTimeRemaining + profilesTime);
   }
 
   // =====================================================================
   // ПРОГРЕСС В STORAGE
   // =====================================================================
 
-  async function reportProgress(collected, total, phase, remainingSeconds = null, contacts = null) {
+  async function reportProgress(collected, total, phase, contacts = null) {
     let percent;
     if (total && total > 0) {
       percent = Math.round((collected / total) * 100);
@@ -364,19 +366,20 @@
     if (phase === 'done')    percent = 100;
     if (phase === 'stopped') percent = total ? Math.min(95, percent) : Math.min(50, percent);
 
-    // При завершении показываем total/total
     const displayCount = (phase === 'done' && total) ? total : collected;
     const label = total
       ? `Собрано ${displayCount} из ${total}`
       : `Собрано ${collected}`;
+
+    // Считаем ETA только во время работы
+    const etaSeconds = (phase === 'running') ? calcEtaSeconds(collected, total) : null;
 
     const payload = {
       crm_sync_percent:     percent,
       crm_sync_count:       displayCount,
       crm_sync_total:       total,
       crm_sync_label:       label,
-      // При done убираем ETA (null)
-      crm_sync_eta_seconds: phase === 'done' ? null : (remainingSeconds !== null ? Math.max(0, remainingSeconds) : null),
+      crm_sync_eta_seconds: etaSeconds !== null ? Math.max(0, etaSeconds) : null,
       crm_sync_status:      phase === 'running' ? 'running' : phase,
       crm_sync_phase:       phase === 'running' ? 'scrolling' : phase
     };
@@ -405,38 +408,31 @@
   // ГЛАВНЫЙ ЦИКЛ
   // =====================================================================
 
-  async function runSync(token) {
-    console.log('[CRM] ══ Синхронизация v2.0 запущена ══');
+  async function runSync(token, sessionId) {
+    console.log(`[CRM] ══ Синхронизация v2.1 запущена (session #${sessionId}) ══`);
     startHeartbeat();
     _cachedScrollContainer = null;
 
-    let allContacts      = [];
-    let total            = null;
-    let emptyCycles      = 0;
-    let confirmLeft      = 0;
-    let remainingSeconds = null;
-    let lastMilestone    = 0;
+    let allContacts = [];
+    let total       = null;
+    let emptyCycles = 0;
+    let confirmLeft = 0;
 
-    // Ждём первых карточек (SPA грузит асинхронно)
     if (findProfileLinks().length === 0) {
       console.log('[CRM] Ждём первых карточек...');
       try { await waitForNewCards(0, 15000, token); }
       catch (e) { if (e instanceof CancelledError) { await onStopped(allContacts, null); return; } }
     }
 
-    // Первый урожай
     const firstBatch = harvestNewContacts();
     total = getTotalFromHeader();
-    findScrollContainer(); // лог контейнера
-
-    if (total) {
-      remainingSeconds = calcInitialSeconds(total);
-      console.log(`[CRM] ⏱ Начальный ETA: ${remainingSeconds}с`);
-    }
+    findScrollContainer();
 
     if (firstBatch.length > 0) {
       console.log(`[CRM] Обогащаем первый batch (${firstBatch.length})...`);
       const enriched = await enrichBatch(firstBatch.slice(0, CFG.enrichBatchSize), token);
+      // Проверяем что сессия не сменилась пока шло обогащение
+      if (token.cancelled) { await onStopped([...allContacts, ...enriched], total); return; }
       allContacts.push(...enriched);
       if (firstBatch.length > CFG.enrichBatchSize) {
         allContacts.push(...firstBatch.slice(CFG.enrichBatchSize));
@@ -444,25 +440,20 @@
     }
 
     console.log(`[CRM] Первый урожай: ${firstBatch.length}. Total: ${total ?? '(не найден)'}`);
-    await reportProgress(allContacts.length, total, 'running', remainingSeconds, allContacts);
+    await reportProgress(allContacts.length, total, 'running', allContacts);
 
-    // Параллельный polling total (не блокирует цикл)
     if (!total) {
       pollForTotal(token).then(found => {
         if (found && !token.cancelled) {
           total = found;
-          if (remainingSeconds === null) remainingSeconds = calcInitialSeconds(found);
           console.log(`[CRM] Polling total: ${found}`);
         }
       });
     }
 
-    // ── Основной цикл ──
     while (true) {
-      // ✅ Проверяем стоп перед каждой итерацией
       if (token.cancelled) { await onStopped(allContacts, total); return; }
 
-      // Условие завершения
       if (total !== null && allContacts.length >= total) {
         if (confirmLeft < CFG.confirmScrolls) {
           confirmLeft++;
@@ -478,7 +469,6 @@
         confirmLeft = 0;
       }
 
-      // Скролл
       const countBefore = findProfileLinks().length;
       performScroll(randomInt(CFG.scrollPxMin, CFG.scrollPxMax));
 
@@ -488,81 +478,65 @@
       try { await delayOrCancel(CFG.pauseAfterScroll + randomInt(0, CFG.pauseJitter), token); }
       catch (e) { if (e instanceof CancelledError) { await onStopped(allContacts, total); return; } }
 
-      // Обновляем total если нашли
       if (!total) {
         const f = getTotalFromHeader();
-        if (f) {
-          total = f;
-          if (remainingSeconds === null) remainingSeconds = calcInitialSeconds(f);
-          console.log(`[CRM] Total найден: ${total}`);
-        }
+        if (f) { total = f; console.log(`[CRM] Total найден: ${total}`); }
       }
 
-      // Собираем новые контакты
       const batch = harvestNewContacts();
 
       if (batch.length > 0) {
         emptyCycles = 0;
 
-        // Обогащаем (background проверяет stop перед каждым профилем)
-        const toEnrich  = batch.slice(0, CFG.enrichBatchSize);
-        const enriched  = await enrichBatch(toEnrich, token);
+        const toEnrich = batch.slice(0, CFG.enrichBatchSize);
+        const enriched = await enrichBatch(toEnrich, token);
+
+        if (token.cancelled) { await onStopped([...allContacts, ...enriched, ...batch.slice(CFG.enrichBatchSize)], total); return; }
+
         allContacts.push(...enriched);
         if (batch.length > CFG.enrichBatchSize) {
           allContacts.push(...batch.slice(CFG.enrichBatchSize));
         }
 
-        // Убываем ETA
-        if (remainingSeconds !== null) {
-          const newMilestone = Math.floor(allContacts.length / 10) * 10;
-          if (newMilestone > lastMilestone) {
-            const steps = (newMilestone - lastMilestone) / 10;
-            remainingSeconds = Math.max(0, remainingSeconds - steps * TIME_PER_10);
-            lastMilestone    = newMilestone;
-          }
-        }
-
         const pct = total ? `${Math.round(allContacts.length / total * 100)}%` : '?%';
-        console.log(`[CRM] +${batch.length} | ${allContacts.length}${total ? `/${total}` : ''} (${pct})`);
+        // ETA теперь считается в reportProgress через calcEtaSeconds
+        console.log(`[CRM] +${batch.length} | ${allContacts.length}${total ? `/${total}` : ''} (${pct}) ETA=${calcEtaSeconds(allContacts.length, total) ?? '?'}с`);
 
-        // Финальный проход при остатке < порога
         if (total !== null && (total - allContacts.length) < CFG.nearEndThreshold && (total - allContacts.length) >= 0) {
           console.log(`[CRM] Остаток < ${CFG.nearEndThreshold} — финальный проход`);
           await new Promise(r => setTimeout(r, 1200));
-          const finalRaw      = harvestNewContacts();
+          const finalRaw     = harvestNewContacts();
           const finalEnriched = finalRaw.length > 0 ? await enrichBatch(finalRaw, token) : [];
           allContacts.push(...finalEnriched);
           console.log(`[CRM] ✓ Финал: ${allContacts.length}/${total}`);
           break;
         }
 
-        await reportProgress(allContacts.length, total, 'running', remainingSeconds, allContacts);
+        await reportProgress(allContacts.length, total, 'running', allContacts);
       } else {
         emptyCycles++;
         console.log(`[CRM] Нет новых (${emptyCycles}${total ? `, осталось: ${total - allContacts.length}` : ''})`);
-        await reportProgress(allContacts.length, total, 'running', remainingSeconds);
+        await reportProgress(allContacts.length, total, 'running');
       }
     }
 
-    // ── Финал ──
     stopHeartbeat();
     setState(STATE.DONE);
 
     const finalCount = (total && total > 0) ? total : allContacts.length;
-
     await chrome.storage.local.set({
       crm_contacts:         allContacts,
       crm_sync_count:       finalCount,
       crm_sync_total:       total,
-      crm_sync_percent:     100,         // ✅ всегда 100 при done
+      crm_sync_percent:     100,
       crm_sync_label:       total ? `Собрано ${finalCount} из ${total}` : `Собрано ${allContacts.length}`,
-      crm_sync_eta_seconds: null,        // ✅ убираем ETA при завершении
+      crm_sync_eta_seconds: null,
       crm_sync_phase:       'done',
       crm_sync_status:      'done',
-      crm_sync_command:     null         // ✅ сбрасываем команду
+      crm_sync_command:     null
     });
 
-    console.log(`[CRM] ✓ Готово: ${allContacts.length}${total ? `/${total}` : ''}`);
+    console.log(`[CRM] ✓ Готово (session #${sessionId}): ${allContacts.length}${total ? `/${total}` : ''}`);
   }
 
   async function onStopped(contacts, total) {
@@ -582,7 +556,7 @@
       crm_sync_eta_seconds: null,
       crm_sync_phase:       'stopped',
       crm_sync_status:      'stopped',
-      crm_sync_command:     null  // ✅ сбрасываем команду
+      crm_sync_command:     null
     });
     console.log(`[CRM] Остановлено: ${contacts.length}`);
   }
@@ -591,20 +565,20 @@
   // ТОЧКА ВХОДА
   // =====================================================================
 
-  /**
-   * ✅ БАГ 1 FIX: startSync() теперь единственная точка запуска.
-   * Проверяет currentState — дублирование невозможно.
-   */
   function startSync() {
     if (currentState === STATE.RUNNING) {
-      console.log('[CRM] Уже запущено — игнорируем повторный старт');
+      console.log('[CRM] Уже запущено — игнорируем');
       return;
     }
 
+    // ✅ БАГ 2 FIX: полный сброс состояния перед каждым запуском
     seenUrls               = new Set();
     _cachedScrollContainer = null;
+    syncSessionId          = Date.now(); // уникальный ID — старые async операции устаревают
     currentToken           = makeStopToken();
     setState(STATE.RUNNING);
+
+    console.log(`[CRM] startSync() session #${syncSessionId}`);
 
     chrome.storage.local.set({
       crm_sync_status:      'running',
@@ -616,7 +590,7 @@
       crm_sync_eta_seconds: null
     });
 
-    runSync(currentToken).catch(err => {
+    runSync(currentToken, syncSessionId).catch(err => {
       if (err instanceof CancelledError) return;
       console.error('[CRM] Критическая ошибка:', err);
       stopHeartbeat();
@@ -625,79 +599,58 @@
     });
   }
 
-  /**
-   * ✅ БАГ 4 FIX: stopSync() отменяет токен.
-   * Цикл проверяет token.cancelled на каждом await.
-   * background.js тоже остановит обогащение профилей.
-   */
   function stopSync() {
     if (currentState !== STATE.RUNNING || !currentToken) return;
     console.log('[CRM] STOP → отменяем токен');
     currentToken.cancelled = true;
-    // setState обновится в onStopped после завершения цикла
   }
 
   // =====================================================================
-  // КОМАНДЫ ОТ DASHBOARD
+  // КОМАНДЫ
   // =====================================================================
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.crm_sync_command) return;
     const cmd = changes.crm_sync_command.newValue;
-
     if (cmd === 'start') startSync();
     if (cmd === 'stop')  stopSync();
   });
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'PING') {
-      sendResponse({ alive: true, state: currentState });
+      sendResponse({ alive: true, state: currentState, session: syncSessionId });
       return true;
     }
   });
 
   // =====================================================================
-  // ИНИЦИАЛИЗАЦИЯ — автовосстановление ТОЛЬКО при свежем heartbeat
+  // ИНИЦИАЛИЗАЦИЯ
   // =====================================================================
 
-  /**
-   * ✅ БАГ 1 FIX: безусловный автостарт убран.
-   *
-   * Автовосстановление разрешено ТОЛЬКО если:
-   *   1. crm_sync_command === 'start'
-   *   2. crm_sync_status === 'running'
-   *   3. Heartbeat был меньше CFG.autoRestoreMaxAge назад
-   *      (страница обновилась в процессе синхронизации)
-   *
-   * Во всех остальных случаях:
-   *   - команду сбрасываем → ждём явного нажатия кнопки
-   */
   chrome.storage.local.get(
     ['crm_sync_command', 'crm_sync_status', 'crm_heartbeat'],
     data => {
-      const cmd      = data.crm_sync_command  || null;
-      const status   = data.crm_sync_status   || 'idle';
-      const hbAge    = Date.now() - (data.crm_heartbeat || 0);
+      const cmd    = data.crm_sync_command || null;
+      const status = data.crm_sync_status  || 'idle';
+      const hbAge  = Date.now() - (data.crm_heartbeat || 0);
 
-      const wasRunning   = cmd === 'start' && status === 'running';
-      const hbFresh      = hbAge < CFG.autoRestoreMaxAge;
+      const wasRunning = cmd === 'start' && status === 'running';
+      const hbFresh    = hbAge < CFG.autoRestoreMaxAge;
 
       if (wasRunning && hbFresh) {
         console.log(`[CRM] Автовосстановление (heartbeat ${Math.round(hbAge / 1000)}с назад)`);
         startSync();
       } else if (cmd === 'start') {
-        // Команда зависла в storage (прошлая сессия) — сбрасываем
         console.log('[CRM] Старая команда start в storage — сбрасываем');
         chrome.storage.local.set({ crm_sync_command: null });
       }
     }
   );
 
-  // Сообщаем background что готовы (background в v2.0 НЕ автостартует по этому)
   if (chrome.runtime?.id) {
     chrome.runtime.sendMessage({ type: 'CONTENT_READY' }).catch(() => {});
   }
 
-  console.log('[CRM] content.js v2.0 готов');
+  console.log('[CRM] content.js v2.1 готов');
 
 })();
