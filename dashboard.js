@@ -1,154 +1,189 @@
 /**
- * dashboard.js — LinkedIn CRM v2.1
+ * dashboard.js — LinkedIn CRM v2.3
  *
- * Новое:
- *   1. HELP_VIDEO_URL — вставьте сюда ссылку на видео-инструкцию split screen
- *   2. Кнопка "?" открывает/закрывает popover с видео (click toggle + Escape)
+ * UI полностью на английском.
+ * Вкладки: Sync | Search (с отраслями) | Help (FAQ + видео) | Contacts (soon)
+ * CSV: Name, URL, Job Title, Company, School, Major
  */
 (function () {
   'use strict';
 
-  // ═══════════════════════════════════════════════════════════════
-  // 👉 ВСТАВЬТЕ СЮДА ССЫЛКУ НА ВИДЕО-ИНСТРУКЦИЮ ПО SPLIT SCREEN
-  //    Формат: прямая ссылка на .mp4 файл или совместимое видео
-  //    id видео-элемента в HTML: "w4m9qx"
+  // ═══════════════════════════════════════════════════════════════════════
+  // 👉 DEMO VIDEO — вкладка Help (с controls, можно поставить на паузу)
+  const DEMO_VIDEO_URL = 'PASTE_YOUR_VIDEO_LINK_HERE';
+
+  // 👉 HELP VIDEO — split screen popover (без controls, autoplay loop muted)
+  //    id элемента в HTML: "w4m9qx"
   const HELP_VIDEO_URL = 'PASTE_YOUR_VIDEO_LINK_HERE';
-  // ═══════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
 
   const CIRCUMFERENCE      = 2 * Math.PI * 52;
-  const HEARTBEAT_STALE_MS = 15_000;
+  const HEARTBEAT_STALE_MS = 15000;
 
-  const arc        = document.getElementById('progressArc');
-  const pctEl      = document.getElementById('progressPercent');
-  const statusEl   = document.getElementById('syncStatus');
-  const countEl    = document.getElementById('syncCount');
-  const etaEl      = document.getElementById('syncEta');
-  const etaTextEl  = document.getElementById('syncEtaText');
-  const btnStart   = document.getElementById('btnStart');
-  const btnStop    = document.getElementById('btnStop');
-  const btnCSV     = document.getElementById('btnDownloadCSV');
-  const restartModal    = document.getElementById('restartModal');
-  const btnModalConfirm = document.getElementById('btnModalConfirm');
-  const btnModalCancel  = document.getElementById('btnModalCancel');
-  const navButtons = document.querySelectorAll('.nav__item[data-nav]:not([disabled])');
-  const panels     = document.querySelectorAll('.main-panel[data-panel]');
+  // ── DOM refs ──────────────────────────────────────────────────────────
+  var arc        = document.getElementById('progressArc');
+  var pctEl      = document.getElementById('progressPercent');
+  var statusEl   = document.getElementById('syncStatus');
+  var countEl    = document.getElementById('syncCount');
+  var etaEl      = document.getElementById('syncEta');
+  var etaTextEl  = document.getElementById('syncEtaText');
+  var btnStart   = document.getElementById('btnStart');
+  var btnStop    = document.getElementById('btnStop');
+  var btnCSV     = document.getElementById('btnDownloadCSV');
+  var restartModal    = document.getElementById('restartModal');
+  var btnModalConfirm = document.getElementById('btnModalConfirm');
+  var btnModalCancel  = document.getElementById('btnModalCancel');
+  var navButtons = document.querySelectorAll('.nav__item[data-nav]:not([disabled])');
+  var panels     = document.querySelectorAll('.main-panel[data-panel]');
 
-  // ── Split screen видео ────────────────────────────────────────────────
-  // Устанавливаем src видео из константы HELP_VIDEO_URL
-  const videoEl  = document.getElementById('w4m9qx');
-  const videoSrc = document.getElementById('w4m9qxSrc');
-  if (videoEl && videoSrc && HELP_VIDEO_URL && HELP_VIDEO_URL !== 'PASTE_YOUR_VIDEO_LINK_HERE') {
-    videoSrc.src = HELP_VIDEO_URL;
-    videoEl.load();
+  // ── Demo video (Help tab) ──────────────────────────────────────────────
+  var demoVideo    = document.getElementById('demoVideo');
+  var demoVideoSrc = document.getElementById('demoVideoSrc');
+  if (demoVideo && demoVideoSrc && DEMO_VIDEO_URL !== 'PASTE_YOUR_VIDEO_LINK_HERE') {
+    demoVideoSrc.src = DEMO_VIDEO_URL;
+    demoVideo.load();
   }
 
-  // Кнопка "?" — toggle popover
-  const helpBtn     = document.getElementById('splitscreenHelpBtn');
-  const helpPopover = document.getElementById('splitscreenPopover');
+  // ── Split screen popover video ─────────────────────────────────────────
+  var helpVideoEl  = document.getElementById('w4m9qx');
+  var helpVideoSrc = document.getElementById('w4m9qxSrc');
+  if (helpVideoEl && helpVideoSrc && HELP_VIDEO_URL !== 'PASTE_YOUR_VIDEO_LINK_HERE') {
+    helpVideoSrc.src = HELP_VIDEO_URL;
+    helpVideoEl.load();
+  }
 
+  var helpBtn     = document.getElementById('splitscreenHelpBtn');
+  var helpPopover = document.getElementById('splitscreenPopover');
   if (helpBtn && helpPopover) {
     helpBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      const isOpen = !helpPopover.hidden;
+      var isOpen = !helpPopover.hidden;
       helpPopover.hidden = isOpen;
       helpBtn.setAttribute('aria-expanded', String(!isOpen));
-      // Запускаем/останавливаем видео вместе с popover
-      if (videoEl) {
-        if (!isOpen) videoEl.play().catch(() => {});
-        else videoEl.pause();
-      }
+      if (helpVideoEl) { if (!isOpen) helpVideoEl.play().catch(function(){}); else helpVideoEl.pause(); }
     });
-
-    // Закрываем по клику вне popover
     document.addEventListener('click', function (e) {
       if (!helpPopover.hidden && !helpPopover.contains(e.target) && e.target !== helpBtn) {
         helpPopover.hidden = true;
         helpBtn.setAttribute('aria-expanded', 'false');
-        if (videoEl) videoEl.pause();
+        if (helpVideoEl) helpVideoEl.pause();
       }
     });
-
-    // Закрываем по Escape
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !helpPopover.hidden) {
         helpPopover.hidden = true;
         helpBtn.setAttribute('aria-expanded', 'false');
-        if (videoEl) videoEl.pause();
+        if (helpVideoEl) helpVideoEl.pause();
       }
     });
   }
 
-  // ── Навигация ──────────────────────────────────────────────────────────
+  // ── FAQ accordion ──────────────────────────────────────────────────────
+  document.querySelectorAll('.faq__question').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var expanded = btn.getAttribute('aria-expanded') === 'true';
+      var answerId = btn.getAttribute('aria-controls');
+      var answer   = document.getElementById(answerId);
 
+      // Закрываем остальные
+      document.querySelectorAll('.faq__question[aria-expanded="true"]').forEach(function (other) {
+        if (other === btn) return;
+        other.setAttribute('aria-expanded', 'false');
+        var otherA = document.getElementById(other.getAttribute('aria-controls'));
+        if (otherA) otherA.hidden = true;
+      });
+
+      btn.setAttribute('aria-expanded', String(!expanded));
+      if (answer) answer.hidden = expanded;
+    });
+  });
+
+  // ── Navigation ─────────────────────────────────────────────────────────
   function setActiveView(viewId) {
-    navButtons.forEach(btn => {
-      const id = btn.getAttribute('data-nav'), active = id === viewId;
+    navButtons.forEach(function (btn) {
+      var id = btn.getAttribute('data-nav'), active = id === viewId;
       btn.classList.toggle('nav__item--active', active);
       active ? btn.setAttribute('aria-current', 'page') : btn.removeAttribute('aria-current');
     });
-    panels.forEach(p => p.classList.toggle('main-panel--active', p.getAttribute('data-panel') === viewId));
-    document.title = viewId === 'search' ? 'LinkedIn CRM — Поиск' : 'LinkedIn CRM — Синхронизация';
+    panels.forEach(function (p) {
+      p.classList.toggle('main-panel--active', p.getAttribute('data-panel') === viewId);
+    });
+    var titles = { sync:'LinkedIn CRM — Sync', search:'LinkedIn CRM — Search', help:'LinkedIn CRM — Help' };
+    document.title = titles[viewId] || 'LinkedIn CRM';
   }
-  navButtons.forEach(btn => btn.addEventListener('click', function () { var id = btn.getAttribute('data-nav'); if (id) setActiveView(id); }));
-  document.querySelectorAll('[data-go-sync]').forEach(el => el.addEventListener('click', function (e) { e.preventDefault(); setActiveView('sync'); }));
+  navButtons.forEach(function (btn) {
+    btn.addEventListener('click', function () { var id = btn.getAttribute('data-nav'); if (id) setActiveView(id); });
+  });
+  document.querySelectorAll('[data-go-sync]').forEach(function (el) {
+    el.addEventListener('click', function (e) { e.preventDefault(); setActiveView('sync'); });
+  });
 
-  // ── Кольцо ──────────────────────────────────────────────────────────────
-
+  // ── Progress ring ──────────────────────────────────────────────────────
   function setRingProgress(pct) {
     var p = Math.max(0, Math.min(100, pct));
     if (arc) { arc.style.strokeDasharray = String(CIRCUMFERENCE); arc.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - p / 100)); }
     if (pctEl) pctEl.textContent = String(Math.round(p));
   }
 
-  // ── ETA ─────────────────────────────────────────────────────────────────
-
+  // ── ETA ────────────────────────────────────────────────────────────────
   function formatEta(s) {
     if (s === null || s === undefined || s < 0) return null;
-    if (s < 60) return '~' + Math.max(1, Math.round(s)) + ' сек';
+    if (s < 60) return '~' + Math.max(1, Math.round(s)) + 's';
     var m = Math.round(s / 60);
-    if (m < 60) return '~' + m + ' мин';
+    if (m < 60) return '~' + m + ' min';
     var h = Math.floor(m / 60), rm = m % 60;
-    return rm > 0 ? '~' + h + ' ч ' + rm + ' мин' : '~' + h + ' ч';
+    return rm > 0 ? '~' + h + 'h ' + rm + 'min' : '~' + h + 'h';
   }
 
-  // ── State → UI ──────────────────────────────────────────────────────────
-
+  // ── State → UI ─────────────────────────────────────────────────────────
   function applyState(status, phase, count, percent, total, label, etaSeconds) {
-    var running = status === 'running', isDone = status === 'done', hasContacts = count > 0;
+    var running = status === 'running';
+    var isDone  = status === 'done';
+    var hasContacts = count > 0;
 
     if (btnStart) {
       btnStart.disabled = running;
-      btnStart.textContent = isDone ? 'Начать заново'
-        : (status === 'stopped' && hasContacts ? 'Продолжить синхронизацию' : 'Начать синхронизацию');
+      btnStart.textContent = isDone ? 'Start Over'
+        : (status === 'stopped' && hasContacts ? 'Resume Sync' : 'Start Sync');
     }
-
     if (btnStop) btnStop.disabled = !running;
     if (btnCSV)  btnCSV.disabled  = !hasContacts;
 
-    if (countEl) countEl.textContent = label || (total ? count + ' / ' + total : String(count));
+    if (countEl) {
+      // Метка "Collected X of Y" приходит из content.js (crm_sync_label)
+      // но там текст на русском — генерируем свой английский
+      if (label && label.startsWith('Собрано')) {
+        var m = label.match(/(\d+)\s*из\s*(\d+)/);
+        var m2 = label.match(/Собрано\s+(\d+)$/);
+        if (m) countEl.textContent = 'Collected ' + m[1] + ' of ' + m[2];
+        else if (m2) countEl.textContent = 'Collected ' + m2[1];
+        else countEl.textContent = label;
+      } else {
+        countEl.textContent = label || (total ? 'Collected ' + count + ' of ' + total : String(count));
+      }
+    }
 
     if (etaEl && etaTextEl) {
       var showEta = running && total && count >= 10 && etaSeconds !== null;
       var etaStr  = showEta ? formatEta(etaSeconds) : null;
-      if (etaStr) { etaTextEl.textContent = 'осталось ' + etaStr; etaEl.hidden = false; }
+      if (etaStr) { etaTextEl.textContent = etaStr + ' left'; etaEl.hidden = false; }
       else etaEl.hidden = true;
     }
 
     if (statusEl) {
       statusEl.textContent = ({
-        idle:    'Ожидание запуска',
-        running: 'Сбор контактов…',
-        stopped: 'Остановлено',
-        done:    'Завершено ✓',
-        error:   'Ошибка — смотри консоль LinkedIn'
-      })[status] || 'Ожидание запуска';
+        idle:    'Waiting to start',
+        running: 'Syncing…',
+        stopped: 'Stopped',
+        done:    'Completed ✓',
+        error:   'Error — check LinkedIn console'
+      })[status] || 'Waiting to start';
     }
 
     setRingProgress(status === 'idle' ? 0 : percent);
   }
 
-  // ── Инициализация ────────────────────────────────────────────────────────
-
+  // ── Init ───────────────────────────────────────────────────────────────
   var ALL_KEYS = ['crm_sync_status','crm_sync_phase','crm_sync_count','crm_sync_percent','crm_sync_total','crm_sync_label','crm_sync_eta_seconds','crm_heartbeat'];
 
   function loadAndApplyState() {
@@ -165,55 +200,48 @@
 
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area !== 'local') return;
-    var relevant = ['crm_sync_status','crm_sync_phase','crm_sync_count','crm_sync_percent','crm_sync_total','crm_sync_label','crm_sync_eta_seconds'];
-    if (!relevant.some(function (k) { return k in changes; })) return;
+    var rel = ['crm_sync_status','crm_sync_phase','crm_sync_count','crm_sync_percent','crm_sync_total','crm_sync_label','crm_sync_eta_seconds'];
+    if (!rel.some(function (k) { return k in changes; })) return;
     chrome.storage.local.get(ALL_KEYS, function (data) {
       applyState(data.crm_sync_status||'idle', data.crm_sync_phase||'', data.crm_sync_count||0, data.crm_sync_percent||0, data.crm_sync_total||null, data.crm_sync_label||'', data.crm_sync_eta_seconds != null ? data.crm_sync_eta_seconds : null);
     });
   });
 
-  // ── Modal ────────────────────────────────────────────────────────────────
-
+  // ── Modal ──────────────────────────────────────────────────────────────
   function showModal() { if (restartModal) restartModal.hidden = false; }
   function hideModal() { if (restartModal) restartModal.hidden = true; }
   if (restartModal) restartModal.addEventListener('click', function (e) { if (e.target === restartModal) hideModal(); });
   if (btnModalCancel) btnModalCancel.addEventListener('click', hideModal);
-  if (btnModalConfirm) {
-    btnModalConfirm.addEventListener('click', async function () { hideModal(); await performRestart(); });
-  }
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && restartModal && !restartModal.hidden) hideModal();
-  });
+  if (btnModalConfirm) btnModalConfirm.addEventListener('click', async function () { hideModal(); await performRestart(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && restartModal && !restartModal.hidden) hideModal(); });
 
-  // ── Restart ──────────────────────────────────────────────────────────────
-
+  // ── Restart ────────────────────────────────────────────────────────────
   async function performRestart() {
-    if (statusEl) statusEl.textContent = 'Сброс данных…';
+    if (statusEl) statusEl.textContent = 'Resetting…';
     if (btnStart) btnStart.disabled = true;
     await new Promise(function (resolve) {
-      chrome.runtime.sendMessage({ type: 'RESTART_SYNC' }, function (response) {
+      chrome.runtime.sendMessage({ type: 'RESTART_SYNC' }, function (r) {
         if (chrome.runtime.lastError) console.warn('[CRM] RESTART_SYNC:', chrome.runtime.lastError.message);
         resolve();
       });
     });
-    if (statusEl) statusEl.textContent = 'Перезагрузка LinkedIn…';
+    if (statusEl) statusEl.textContent = 'Reloading LinkedIn…';
     await new Promise(function (r) { setTimeout(r, 4000); });
     await handleStart();
   }
 
-  // ── Кнопки ───────────────────────────────────────────────────────────────
-
+  // ── Start ──────────────────────────────────────────────────────────────
   async function handleStart() {
     if (btnStart) btnStart.disabled = true;
-    if (statusEl) statusEl.textContent = 'Подключение к LinkedIn…';
+    if (statusEl) statusEl.textContent = 'Connecting to LinkedIn…';
     var ok = await new Promise(function (resolve) {
-      chrome.runtime.sendMessage({ type: 'ENSURE_CONTENT_SCRIPT' }, function (response) {
+      chrome.runtime.sendMessage({ type: 'ENSURE_CONTENT_SCRIPT' }, function (r) {
         if (chrome.runtime.lastError) { resolve(true); return; }
-        resolve(response && response.ok !== false);
+        resolve(r && r.ok !== false);
       });
     });
     if (!ok) {
-      if (statusEl) statusEl.textContent = 'Ошибка: откройте вкладку LinkedIn Connections';
+      if (statusEl) statusEl.textContent = 'Error: open LinkedIn Connections tab';
       if (btnStart) btnStart.disabled = false;
       return;
     }
@@ -228,25 +256,21 @@
       });
     });
   }
-
   if (btnStop) btnStop.addEventListener('click', function () { chrome.storage.local.set({ crm_sync_command: 'stop' }); });
 
-  // ── TSV export ───────────────────────────────────────────────────────────
-
+  // ── CSV export (Name, URL, Job Title, Company, School, Major) ───────────
   function downloadTSV(contacts) {
     if (!contacts || !contacts.length) return;
-    function clean(v) { return String(v || '').replace(/\t/g, ' ').replace(/\r?\n/g, ' '); }
-    var lines = [['Name','URL','Job Title','Company','School'].join('\t')].concat(
+    function clean(v) { return String(v || '').replace(/\t/g,' ').replace(/\r?\n/g,' '); }
+    var lines = [['Name','URL','Job Title','Company','School','Major'].join('\t')].concat(
       contacts.map(function (c) {
-        return [clean(c.fullName), clean(c.profileUrl), clean(c.jobTitle), clean(c.company), clean(c.school)].join('\t');
+        return [clean(c.fullName), clean(c.profileUrl), clean(c.jobTitle), clean(c.company), clean(c.school), clean(c.major)].join('\t');
       })
     );
     var blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/tab-separated-values;charset=utf-8' });
     var url  = URL.createObjectURL(blob);
     var a    = document.createElement('a');
-    a.href = url;
-    a.download = 'linkedin_contacts_' + new Date().toISOString().slice(0, 10) + '.tsv';
-    a.style.display = 'none';
+    a.href = url; a.download = 'linkedin_contacts_' + new Date().toISOString().slice(0,10) + '.tsv'; a.style.display = 'none';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
   }
@@ -255,20 +279,19 @@
     btnCSV.addEventListener('click', function () {
       chrome.storage.local.get(['crm_contacts'], function (data) {
         var contacts = data.crm_contacts || [];
-        if (!contacts.length) { alert('Нет контактов. Запустите синхронизацию.'); return; }
+        if (!contacts.length) { alert('No contacts yet. Start sync first.'); return; }
         downloadTSV(contacts);
       });
     });
   }
 
-  // ── Поиск: отрасли ───────────────────────────────────────────────────────
-
+  // ── Search: industries ─────────────────────────────────────────────────
   var INDUSTRY_OPTIONS = [
-    {id:'finance',label:'Финансы'},{id:'consulting',label:'Консалтинг'},{id:'tech',label:'Технологии'},
-    {id:'ai_ml',label:'AI / ML'},{id:'healthcare',label:'Медицина'},{id:'energy',label:'Энергетика'},
-    {id:'consumer',label:'Потребительский'},{id:'industrial',label:'Промышленность'},{id:'real_estate',label:'Недвижимость'},
-    {id:'media',label:'Медиа'},{id:'education',label:'Образование'},{id:'venture_capital',label:'Венчур'},
-    {id:'government',label:'Госсектор'},{id:'other',label:'Другое'}
+    {id:'finance',label:'Finance'},{id:'consulting',label:'Consulting'},{id:'tech',label:'Technology'},
+    {id:'ai_ml',label:'AI / ML'},{id:'healthcare',label:'Healthcare'},{id:'energy',label:'Energy'},
+    {id:'consumer',label:'Consumer'},{id:'industrial',label:'Industrial'},{id:'real_estate',label:'Real Estate'},
+    {id:'media',label:'Media'},{id:'education',label:'Education'},{id:'venture_capital',label:'Venture Capital'},
+    {id:'government',label:'Government'},{id:'other',label:'Other'}
   ];
   var industryRoot  = document.getElementById('industryTags');
   var keywordsInput = document.getElementById('searchKeywords');
@@ -284,7 +307,7 @@
   if (btnSearch) {
     btnSearch.addEventListener('click', function () {
       var industries = industryRoot ? Array.from(industryRoot.querySelectorAll('input:checked')).map(function (el) { return el.value; }) : [];
-      console.log('[CRM Dashboard] Search payload:', { schemaVersion: 1, keywords: { raw: keywordsInput ? keywordsInput.value.trim() : '', semantic: null }, industries: industries });
+      console.log('[CRM] Search:', { keywords: keywordsInput ? keywordsInput.value.trim() : '', industries: industries });
     });
   }
 

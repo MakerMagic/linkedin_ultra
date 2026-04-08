@@ -1,349 +1,251 @@
 /**
- * profile_scraper.js — LinkedIn CRM v2.2
+ * profile_scraper.js — LinkedIn CRM v2.4
  *
- * Исправлено:
- *   1. Не используем className — только структуру DOM и атрибуты
- *   2. Рекурсивно собираем <p> через все вложенные <div> внутри <a>
- *   3. Пропускаем первый <a> (иконка компании с <svg>)
- *   4. Берём ПОСЛЕДНИЙ валидный <a> в секции
- *   5. Fallback по заголовкам для русского интерфейса LinkedIn
+ * Парсинг по ТЗ:
+ *   - componentKey: ExperienceTopLevelSection / EducationTopLevelSection
+ *   - Fallback (русский UI): "Опыт", "Опыт работы", "Образование"
+ *   - Берём все <a> в секции, игнорируем первый (иконка), берём второй / последний
+ *   - a.querySelectorAll("p") → p[0]=jobTitle, p[1]=company / p[0]=school, p[1]=major
+ *   - Пустые значения = "" (не null)
+ *
+ * Fast scroll:
+ *   - window.scrollTo(0, scrollHeight) несколько раз, delay 200–400ms
+ *   - до стабилизации scrollHeight
  */
 (function () {
   'use strict';
 
-  // ── Очистка текста (убираем скрытые элементы) ────────────────────────────
+  // ── Очистка текста ────────────────────────────────────────────────────
 
   function cleanText(el) {
     if (!el) return '';
     const clone = el.cloneNode(true);
-    // Убираем sr-only и aria-hidden спаны — они дублируют текст для скринридеров
     clone.querySelectorAll('[aria-hidden="true"], .sr-only, .visually-hidden').forEach(n => n.remove());
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
-  // ── Рекурсивный сбор всех <p> внутри элемента ───────────────────────────
+  // ── Fast scroll ────────────────────────────────────────────────────────
 
   /**
-   * Проходит через все вложенные <div> внутри корневого элемента
-   * и собирает все найденные <p> в порядке их появления.
-   *
-   * Структура LinkedIn:
-   *   <a>
-   *     <div>           ← первый уровень вложенности
-   *       <div>         ← второй уровень
-   *         <p>Должность</p>
-   *         <p>Компания</p>
-   *       </div>
-   *     </div>
-   *   </a>
+   * Быстрый скролл до конца страницы.
+   * LinkedIn лениво рендерит секции — нужно прокрутить чтобы они появились.
+   * Шаг 200–400ms, максимум 6 итераций, стоп при стабилизации высоты.
    */
-  function collectParagraphs(root) {
-    // querySelectorAll обходит дерево рекурсивно сам по себе
-    return Array.from(root.querySelectorAll('p'))
-      .map(p => cleanText(p))
-      .filter(t => t.length > 0);
+  async function fastScroll() {
+    console.log('[CRM Scraper] Fast scroll started');
+    let prevHeight = -1;
+    let iterations = 0;
+
+    while (iterations < 6) {
+      const h = document.body.scrollHeight;
+      window.scrollTo(0, h);
+      const delay = 200 + Math.random() * 200;
+      await new Promise(r => setTimeout(r, delay));
+      const newH = document.body.scrollHeight;
+      console.log(`[CRM Scraper] Fast scroll ${iterations + 1}: ${prevHeight} → ${h} → ${newH}`);
+      if (newH === h && iterations > 0) { console.log('[CRM Scraper] Fast scroll completed'); break; }
+      prevHeight = h;
+      iterations++;
+    }
+
+    // Возвращаемся наверх
+    window.scrollTo(0, 0);
+    await new Promise(r => setTimeout(r, 300));
   }
 
-  // ── Проверка: содержит ли <a> только иконку (SVG без текста) ────────────
+  // ── Ожидание секций ────────────────────────────────────────────────────
 
-  /**
-   * Первый <a> в секции LinkedIn — это иконка компании/учебного заведения.
-   * Признаки: содержит <svg> И не содержит текстовых <p>.
-   */
-  function isIconLink(a) {
-    const hasSvg  = a.querySelector('svg') !== null;
-    const hasImg  = a.querySelector('img') !== null;
-    const hasPara = a.querySelector('p') !== null;
+  function waitForSections(timeoutMs) {
+    return new Promise(resolve => {
+      function isReady() {
+        if (document.querySelector('[componentKey*="Experience"],[componentkey*="experience"]')) return true;
+        if (document.querySelector('[componentKey*="Education"],[componentkey*="education"]')) return true;
+        if (document.querySelector('#experience,#education')) return true;
+        return Array.from(document.querySelectorAll('h2,h3')).some(h => {
+          const t = (h.textContent || '').trim().toLowerCase();
+          return t === 'опыт' || t === 'опыт работы' || t === 'образование' || t === 'experience' || t === 'education';
+        });
+      }
 
-    // Иконка: есть svg или img, но нет параграфов с текстом
-    return (hasSvg || hasImg) && !hasPara;
+      if (isReady()) { resolve(); return; }
+
+      let done = false;
+      function finish() {
+        if (done) return; done = true;
+        clearInterval(pollId); obs.disconnect(); clearTimeout(timer);
+        resolve();
+      }
+
+      const pollId = setInterval(() => { if (isReady()) finish(); }, 300);
+      const obs    = new MutationObserver(() => { if (isReady()) finish(); });
+      obs.observe(document.body, { childList: true, subtree: true });
+      const timer  = setTimeout(finish, timeoutMs || 10000);
+    });
   }
 
-  // ── Поиск всех <a> в секции, исключая первый-иконку ─────────────────────
+  // ── Поиск секций ──────────────────────────────────────────────────────
 
-  /**
-   * Возвращает список <a> внутри секции.
-   * Первый <a> с иконкой (svg/img без <p>) — пропускается.
-   * Из оставшихся берём ПОСЛЕДНИЙ — это актуальное место работы/учёбы.
-   */
-  function getLastMeaningfulLink(section) {
-    const links = Array.from(section.querySelectorAll('a'));
-
-    if (links.length === 0) return null;
-
-    // Фильтруем: убираем иконки (первые ссылки с svg/img без параграфов)
-    const meaningful = links.filter(a => !isIconLink(a));
-
-    console.log(`[CRM Scraper]   Ссылок всего: ${links.length}, осмысленных: ${meaningful.length}`);
-
-    if (meaningful.length === 0) return null;
-
-    // Берём ПОСЛЕДНИЙ осмысленный <a> — актуальная запись
-    return meaningful[meaningful.length - 1];
-  }
-
-  // ── Поиск секции Experience/Education ────────────────────────────────────
-
-  /**
-   * Ищет секцию по двум методам:
-   *
-   * Метод 1 (приоритет): componentKey атрибут
-   *   - ExperienceTopLevelSection → секция опыта
-   *   - EducationTopLevelSection  → секция образования
-   *
-   * Метод 2 (fallback для русского UI): заголовок секции
-   *   - "Опыт" / "Опыт работы" / "Experience" → опыт
-   *   - "Образование" / "Education"            → образование
-   */
   function findSections() {
     let experienceSection = null;
     let educationSection  = null;
 
-    // ── Метод 1: componentKey ──
-    const allWithKey = document.querySelectorAll('[componentKey], [componentkey]');
-
-    for (const el of allWithKey) {
-      const ck = el.getAttribute('componentKey') || el.getAttribute('componentkey') || '';
-
-      if (/ExperienceTopLevelSection/i.test(ck) && !experienceSection) {
+    // Метод 1: componentKey
+    for (const el of document.querySelectorAll('[componentKey],[componentkey]')) {
+      const ck = (el.getAttribute('componentKey') || el.getAttribute('componentkey') || '').toLowerCase();
+      if (!experienceSection && ck.includes('experience')) {
         experienceSection = el;
-        console.log('[CRM Scraper] ✅ Найдена секция опыта (componentKey):', ck.slice(0, 80));
+        console.log('[CRM Scraper] ✅ Experience (componentKey)');
       }
-
-      if (/EducationTopLevelSection/i.test(ck) && !educationSection) {
+      if (!educationSection && ck.includes('education')) {
         educationSection = el;
-        console.log('[CRM Scraper] ✅ Найдена секция образования (componentKey):', ck.slice(0, 80));
+        console.log('[CRM Scraper] ✅ Education (componentKey)');
       }
     }
 
-    // ── Метод 2: fallback по заголовку (русский / английский UI) ──
+    // Метод 2: заголовок (русский/английский)
     if (!experienceSection || !educationSection) {
-      // Ищем h2, span или div которые содержат заголовок секции
-      const headingCandidates = document.querySelectorAll('h2, section > div > span, [id]');
+      for (const h of document.querySelectorAll('h2,h3,[id]')) {
+        const text = (h.textContent || '').trim().toLowerCase();
+        const id   = (h.id || '').toLowerCase();
 
-      for (const el of headingCandidates) {
-        const text = (el.textContent || '').trim().toLowerCase();
-
-        // Опыт
         if (!experienceSection && (
-          text === 'опыт' ||
-          text === 'опыт работы' ||
-          text === 'experience' ||
-          el.id === 'experience'
+          text === 'опыт' || text === 'опыт работы' || text === 'experience' ||
+          id === 'experience' || id.includes('experience')
         )) {
-          // Поднимаемся до секции
-          experienceSection = el.closest('section') || el.parentElement?.parentElement || el;
-          console.log('[CRM Scraper] ✅ Найдена секция опыта (заголовок):', text);
+          experienceSection = h.closest('section') || h.parentElement?.parentElement || h;
+          console.log('[CRM Scraper] ✅ Experience (heading):', text || id);
         }
 
-        // Образование
         if (!educationSection && (
-          text === 'образование' ||
-          text === 'education' ||
-          el.id === 'education'
+          text === 'образование' || text === 'education' ||
+          id === 'education' || id.includes('education')
         )) {
-          educationSection = el.closest('section') || el.parentElement?.parentElement || el;
-          console.log('[CRM Scraper] ✅ Найдена секция образования (заголовок):', text);
+          educationSection = h.closest('section') || h.parentElement?.parentElement || h;
+          console.log('[CRM Scraper] ✅ Education (heading):', text || id);
         }
       }
-    }
-
-    // ── Метод 3: поиск по id секций ──
-    if (!experienceSection) {
-      experienceSection =
-        document.querySelector('#experience') ||
-        document.querySelector('[id*="experience"]') ||
-        null;
-      if (experienceSection) console.log('[CRM Scraper] ✅ Найдена секция опыта (id)');
-    }
-
-    if (!educationSection) {
-      educationSection =
-        document.querySelector('#education') ||
-        document.querySelector('[id*="education"]') ||
-        null;
-      if (educationSection) console.log('[CRM Scraper] ✅ Найдена секция образования (id)');
     }
 
     return { experienceSection, educationSection };
   }
 
-  // ── Основной парсинг ─────────────────────────────────────────────────────
+  // ── Проверка: иконка ссылка ────────────────────────────────────────────
+
+  /**
+   * Первый <a> в секции = иконка компании (содержит svg/img но не содержит <p>).
+   */
+  function isIconLink(a) {
+    return (a.querySelector('svg') || a.querySelector('img')) && !a.querySelector('p');
+  }
+
+  // ── Выбор нужной ссылки ────────────────────────────────────────────────
+
+  /**
+   * По ТЗ: берём все <a>, игнорируем первый (иконка), берём второй/последний.
+   * "Второй" означает второй в порядке DOM — для актуальной записи.
+   * Если второй отсутствует — берём последний.
+   */
+  function getTargetLink(section) {
+    if (!section) return null;
+    const links = Array.from(section.querySelectorAll('a'));
+    console.log(`[CRM Scraper] Links in section: ${links.length}`);
+
+    // Фильтруем иконки
+    const meaningful = links.filter(a => !isIconLink(a));
+    console.log(`[CRM Scraper] Meaningful links: ${meaningful.length}`);
+
+    if (meaningful.length === 0) return null;
+
+    // Берём второй (индекс 1) — или последний если только один
+    return meaningful.length >= 2 ? meaningful[1] : meaningful[meaningful.length - 1];
+  }
+
+  // ── Основной парсинг ──────────────────────────────────────────────────
 
   function scrapeProfile() {
-    console.log('[CRM Scraper] === Начало парсинга ===');
+    console.log('[CRM Scraper] === Scraping profile ===');
     console.log('[CRM Scraper] URL:', location.href);
-    console.log('[CRM Scraper] Заголовок:', document.title);
 
-    let jobTitle = null;
-    let company  = null;
-    let school   = null;
+    let jobTitle = '';
+    let company  = '';
+    let school   = '';
+    let major    = '';
 
     const { experienceSection, educationSection } = findSections();
 
-    // ── Секция опыта ──
+    // ── Experience: p[0]=jobTitle, p[1]=company ──
     if (experienceSection) {
-      console.log('[CRM Scraper] Парсим секцию опыта...');
-
-      const link = getLastMeaningfulLink(experienceSection);
-
+      const link = getTargetLink(experienceSection);
       if (link) {
-        const paragraphs = collectParagraphs(link);
-        console.log('[CRM Scraper]   Параграфы в последнем <a>:', paragraphs);
-
-        if (paragraphs[0]) jobTitle = paragraphs[0]; // должность
-        if (paragraphs[1]) company  = paragraphs[1]; // компания
+        const paras = Array.from(link.querySelectorAll('p')).map(p => cleanText(p)).filter(Boolean);
+        console.log('[CRM Scraper] Experience paragraphs:', paras);
+        if (paras[0]) jobTitle = paras[0];
+        if (paras[1]) company  = paras[1];
       } else {
-        console.warn('[CRM Scraper]   Осмысленный <a> в секции опыта не найден');
+        console.warn('[CRM Scraper] No meaningful link in Experience section');
       }
     } else {
-      console.warn('[CRM Scraper] ⚠️ Секция опыта не найдена');
+      console.warn('[CRM Scraper] ⚠️ Experience section not found');
     }
 
-    // ── Секция образования ──
+    // ── Education: p[0]=school, p[1]=major ──
     if (educationSection) {
-      console.log('[CRM Scraper] Парсим секцию образования...');
-
-      const link = getLastMeaningfulLink(educationSection);
-
+      const link = getTargetLink(educationSection);
       if (link) {
-        const paragraphs = collectParagraphs(link);
-        console.log('[CRM Scraper]   Параграфы в последнем <a>:', paragraphs);
-
-        if (paragraphs[0]) school = paragraphs[0]; // учебное заведение
-        // paragraphs[1] — major/специальность, по ТЗ не сохраняем (null)
+        const paras = Array.from(link.querySelectorAll('p')).map(p => cleanText(p)).filter(Boolean);
+        console.log('[CRM Scraper] Education paragraphs:', paras);
+        if (paras[0]) school = paras[0];
+        if (paras[1]) major  = paras[1];
       } else {
-        console.warn('[CRM Scraper]   Осмысленный <a> в секции образования не найден');
+        console.warn('[CRM Scraper] No meaningful link in Education section');
       }
     } else {
-      console.warn('[CRM Scraper] ⚠️ Секция образования не найдена');
+      console.warn('[CRM Scraper] ⚠️ Education section not found');
     }
 
-    // ── Fallback: шапка профиля (occupation subtitle) ──
-    // Используется когда секции не найдены вообще
+    // ── Fallback: occupation subtitle в шапке ──
     if (!jobTitle && !company && !school) {
-      console.log('[CRM Scraper] Fallback: парсим шапку профиля...');
-
-      const occupationEl =
+      const el =
         document.querySelector('.pv-text-details__left-panel .text-body-medium') ||
-        document.querySelector('.ph5 .text-body-medium')                          ||
-        document.querySelector('[data-view-name="profile-card"] .text-body-medium');
-
-      if (occupationEl) {
-        const text = cleanText(occupationEl);
-        console.log('[CRM Scraper]   Occupation text:', text);
-
+        document.querySelector('.ph5 .text-body-medium');
+      if (el) {
+        const text = cleanText(el);
         const atIdx = text.toLowerCase().indexOf(' at ');
         if (atIdx !== -1) {
-          jobTitle = text.slice(0, atIdx).trim() || null;
-          company  = text.slice(atIdx + 4).trim() || null;
+          jobTitle = text.slice(0, atIdx).trim();
+          company  = text.slice(atIdx + 4).trim();
         } else if (text) {
           jobTitle = text;
         }
+        console.log('[CRM Scraper] Fallback:', { jobTitle, company });
       }
     }
 
-    const result = {
-      jobTitle: jobTitle || null,
-      company:  company  || null,
-      school:   school   || null
-    };
-
-    console.log('[CRM Scraper] Итоговый результат:', result);
+    // Пустые значения = "" (не null/undefined)
+    const result = { jobTitle, company, school, major };
+    console.log('[CRM Scraper] Final result:', result);
     return result;
   }
 
-  // ── Ожидание появления секций в DOM ─────────────────────────────────────
-
-  /**
-   * Ждёт появления секций Experience или Education.
-   * LinkedIn — SPA, секции рендерятся асинхронно после загрузки страницы.
-   * Комбинируем MutationObserver + polling каждые 300мс, таймаут 10 сек.
-   */
-  function waitForSections(timeoutMs) {
-    return new Promise(resolve => {
-      function isReady() {
-        // Проверяем оба метода определения секций
-        const hasCK =
-          document.querySelector('[componentKey*="Experience"], [componentkey*="experience"]') ||
-          document.querySelector('[componentKey*="Education"],  [componentkey*="education"]');
-
-        const hasId =
-          document.querySelector('#experience') ||
-          document.querySelector('#education');
-
-        const hasHeader = Array.from(document.querySelectorAll('h2')).some(h => {
-          const t = h.textContent.trim().toLowerCase();
-          return t === 'опыт' || t === 'образование' || t === 'experience' || t === 'education';
-        });
-
-        return !!(hasCK || hasId || hasHeader);
-      }
-
-      if (isReady()) {
-        console.log('[CRM Scraper] Секции уже доступны');
-        resolve();
-        return;
-      }
-
-      console.log('[CRM Scraper] Ждём появления секций...');
-
-      let resolved = false;
-      function finish() {
-        if (resolved) return;
-        resolved = true;
-        clearInterval(pollId);
-        obs.disconnect();
-        clearTimeout(timerId);
-        resolve();
-      }
-
-      // Polling каждые 300мс
-      const pollId = setInterval(() => {
-        if (isReady()) {
-          console.log('[CRM Scraper] Секции появились (polling)');
-          finish();
-        }
-      }, 300);
-
-      // MutationObserver — реагирует мгновенно
-      const obs = new MutationObserver(() => {
-        if (isReady()) {
-          console.log('[CRM Scraper] Секции появились (MutationObserver)');
-          finish();
-        }
-      });
-      obs.observe(document.body, { childList: true, subtree: true });
-
-      // Таймаут — парсим что есть
-      const timerId = setTimeout(() => {
-        console.warn('[CRM Scraper] Таймаут — парсим что загрузилось');
-        finish();
-      }, timeoutMs || 10000);
-    });
-  }
-
-  // ── Основной поток ───────────────────────────────────────────────────────
+  // ── Основной поток ─────────────────────────────────────────────────────
 
   (async () => {
-    // 1. Ждём появления секций
-    await waitForSections(10000);
+    // 1. Fast scroll — загружаем lazy секции
+    await fastScroll();
 
-    // 2. Дополнительная пауза — LinkedIn рендерит контент постепенно
-    await new Promise(r => setTimeout(r, 1000));
+    // 2. Ждём секций (MutationObserver + polling)
+    await waitForSections(8000);
 
-    // 3. Парсим профиль
+    // 3. Пауза после скролла
+    await new Promise(r => setTimeout(r, 500));
+
+    // 4. Парсим
     const result = scrapeProfile();
 
-    // 4. Отправляем результат в background.js
+    // 5. Отправляем в background.js
     if (chrome.runtime?.id) {
-      chrome.runtime.sendMessage({
-        type: 'PROFILE_DATA',
-        data: result,
-        url:  location.href
-      }).catch(err => console.warn('[CRM Scraper] sendMessage error:', err));
-    } else {
-      console.warn('[CRM Scraper] chrome.runtime недоступен — расширение перезагружалось?');
+      chrome.runtime.sendMessage({ type: 'PROFILE_DATA', data: result, url: location.href })
+        .catch(err => console.warn('[CRM Scraper] sendMessage error:', err));
     }
   })();
 

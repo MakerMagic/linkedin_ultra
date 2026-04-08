@@ -485,3 +485,174 @@ html,body {
   /* Курсор pointer убран — видео без controls, без паузы */
   pointer-events: none;
 }
+
+/* ── Confirmation Modal ── */
+.modal-backdrop { position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(11,15,26,.75);backdrop-filter:blur(6px);animation:modal-in .2s ease; }
+.modal-backdrop[hidden] { display:none; }
+@keyframes modal-in { from{opacity:0} to{opacity:1} }
+.modal-box { width:min(420px,90vw);padding:32px 36px;display:flex;flex-direction:column;gap:16px;animation:modal-box-in .2s ease; }
+@keyframes modal-box-in { from{opacity:0;transform:translateY(-12px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+.modal-title { margin:0;font-size:20px;font-weight:700;letter-spacing:-.02em; }
+.modal-text  { margin:0;font-size:14px;color:var(--muted);line-height:1.6; }
+.modal-actions { display:flex;gap:12px;padding-top:8px; }
+
+/* ── Split screen tip ── */
+.splitscreen-tip { display:flex;align-items:center;gap:10px;margin-top:20px;padding:14px 18px;border-radius:12px;border:1px solid var(--border);background:rgba(99,102,241,.07);font-size:13px;color:var(--muted);line-height:1.4; }
+.splitscreen-tip__icon { flex-shrink:0;color:var(--accent);opacity:.8; }
+.splitscreen-tip__text { flex:1;min-width:0; }
+.splitscreen-help { position:relative;flex-shrink:0; }
+.splitscreen-help__btn { display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:50%;border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--muted);cursor:pointer;transition:color .2s,background .2s,border-color .2s; }
+.splitscreen-help__btn:hover,[aria-expanded="true"].splitscreen-help__btn { color:var(--text);background:rgba(255,255,255,.12);border-color:rgba(99,102,241,.4); }
+.splitscreen-help__popover { position:absolute;z-index:30;bottom:calc(100% + 12px);right:0;width:300px;padding:14px;border-radius:14px;border:1px solid var(--border);background:rgba(18,26,43,.97);backdrop-filter:blur(16px);box-shadow:0 20px 60px rgba(0,0,0,.5); }
+.splitscreen-help__popover[hidden] { display:none; }
+.splitscreen-help__title { margin:0 0 10px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted); }
+.splitscreen-help__video { display:block;width:100%;border-radius:8px;background:rgba(0,0,0,.4);pointer-events:none; }
+
+/* ── Guide / Help tab ── */
+
+/* Demo video */
+.guide-video-section { padding: 0; overflow: hidden; }
+.guide-video {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  border-radius: var(--radius);
+  object-fit: cover;
+  pointer-events: none;  /* нельзя поставить на паузу */
+  background: rgba(0,0,0,.3);
+}
+.guide-video__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.guide-faq-section { margin-top: 24px; }
+
+/* FAQ Accordion */
+.faq { display: flex; flex-direction: column; gap: 4px; }
+
+.faq__item {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  transition: border-color .2s;
+}
+.faq__item:has(.faq__question[aria-expanded="true"]) {
+  border-color: rgba(99,102,241,.3);
+}
+
+.faq__question {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 20px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: color .2s;
+}
+.faq__question:hover { color: #a5b4fc; }
+
+.faq__chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform .25s ease;
+}
+.faq__question[aria-expanded="true"] .faq__chevron {
+  transform: rotate(180deg);
+}
+
+.faq__answer { overflow: hidden; }
+.faq__answer[hidden] { display: none; }
+
+.faq__answer-inner {
+  padding: 0 20px 18px;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.faq__answer-inner p { margin: 0 0 10px; }
+.faq__answer-inner p:last-child { margin-bottom: 0; }
+.faq__answer-inner strong { color: var(--text); }
+.faq__answer-inner ul { margin: 6px 0 10px; padding-left: 18px; }
+.faq__answer-inner li { margin-bottom: 4px; }
+
+/* ── Help tab ── */
+
+.help-video-section { padding: 0; overflow: hidden; }
+
+.help-video {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  border-radius: var(--radius);
+  object-fit: cover;
+  background: rgba(0,0,0,.3);
+  /* controls видимы — пользователь может поставить на паузу */
+}
+
+.help-video__placeholder {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 48px 24px; color: var(--muted); font-size: 14px;
+}
+
+.help-faq-section { margin-top: 24px; }
+
+/* FAQ accordion */
+.faq { display: flex; flex-direction: column; gap: 4px; }
+
+.faq__item {
+  border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  transition: border-color .2s;
+}
+
+/* :has() — поддерживается в Chrome 105+ */
+.faq__item:has(.faq__question[aria-expanded="true"]) {
+  border-color: rgba(99,102,241,.3);
+}
+
+.faq__question {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 16px 20px;
+  background: none; border: none;
+  color: var(--text); font: inherit; font-size: 14px; font-weight: 600;
+  text-align: left; cursor: pointer;
+  transition: color .2s;
+}
+.faq__question:hover { color: #a5b4fc; }
+
+.faq__chevron {
+  flex-shrink: 0; color: var(--muted);
+  transition: transform .25s ease;
+}
+.faq__question[aria-expanded="true"] .faq__chevron {
+  transform: rotate(180deg);
+}
+
+.faq__answer { overflow: hidden; }
+.faq__answer[hidden] { display: none; }
+
+.faq__answer-inner {
+  padding: 0 20px 18px;
+  font-size: 14px; color: var(--muted); line-height: 1.65;
+}
+.faq__answer-inner p { margin: 0 0 10px; }
+.faq__answer-inner p:last-child { margin-bottom: 0; }
+.faq__answer-inner strong { color: var(--text); }
+.faq__answer-inner ul { margin: 6px 0 10px; padding-left: 18px; }
+.faq__answer-inner li { margin-bottom: 4px; }
