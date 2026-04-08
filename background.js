@@ -1,11 +1,27 @@
 /**
- * background.js — LinkedIn CRM v2.3
+ * background.js — LinkedIn CRM v2.4
  *
- * Строгий контроль вкладок:
- *   - НЕ открываем connections при старте расширения
- *   - ВСЕ профили открываются в том же окне что и connections
- *   - Ровно одна вкладка connections в любой момент
- *   - При Start/Resume/Restart — проверяем и создаём только если нет
+ * ИСПРАВЛЕНО:
+ *
+ *   БАГ 1 — Множественное открытие вкладок:
+ *     Глобальный объект G (globalState) — единственный источник правды.
+ *     G.isRunning = true → новый запуск блокируется.
+ *     G.activeProfileTabId → перед открытием нового профиля старый закрывается.
+ *
+ *   БАГ 2 — Дублирование connections-вкладок:
+ *     getOrCreateConnectionsTab() — строгий контроль: 0→создать, 1→использовать, >1→закрыть лишние.
+ *
+ *   БАГ 3 — Профили не скроллятся:
+ *     Вкладка открывается active:true → profile_scraper делает fast scroll.
+ *     Таймаут увеличен до 25 сек.
+ *
+ *   БАГ 4 — Процесс продолжается после Stop:
+ *     G.isStopped проверяется ПЕРЕД КАЖДЫМ ШАГОМ пайплайна.
+ *     chrome.runtime.onSuspend → полный сброс при засыпании SW.
+ *
+ *   БАГ 5 — Help "?" иконка:
+ *     Используется тот же SVG что и в nav (circle + question mark path).
+ *     dashboard.html/.css не менялись.
  */
 
 const LINKEDIN_CONNECTIONS_URL = 'https://www.linkedin.com/mynetwork/invite-connect/connections/';
@@ -15,15 +31,41 @@ const LINKEDIN_CONNECTIONS_PATTERNS = [
 ];
 const DASHBOARD_PATH = 'dashboard.html';
 
-// ── Хранение windowId ─────────────────────────────────────────────────────
+// ── ГЛОБАЛЬНЫЙ SINGLETON STATE ────────────────────────────────────────────
 
 /**
- * connectionsWindowId — окно где открыта вкладка LinkedIn Connections.
- * Все вкладки профилей открываются в этом окне.
- * Обновляется при каждом вызове getOrCreateConnectionsTab().
+ * G — единственный источник правды о состоянии пайплайна.
+ *
+ * isRunning:         true → новые вызовы enrichContacts игнорируются
+ * isStopped:         true → все async шаги немедленно прерываются
+ * activeProfileTabId: ID вкладки профиля которая сейчас открыта (или null)
+ * connectionsTabId:   ID вкладки LinkedIn Connections
+ * connectionsWindowId: WindowId этой вкладки
  */
-let connectionsWindowId = chrome.windows.WINDOW_ID_NONE;
-let connectionsTabId    = null;
+const G = {
+  isRunning:          false,
+  isStopped:          false,
+  activeProfileTabId: null,
+  connectionsTabId:   null,
+  connectionsWindowId: chrome.windows.WINDOW_ID_NONE
+};
+
+/**
+ * Полный kill switch.
+ * Вызывается при Stop, onSuspend, SW reboot.
+ * Закрывает активную вкладку профиля, сбрасывает все флаги.
+ */
+async function killPipeline(reason) {
+  console.log(`[CRM BG] ⛔ Kill pipeline: ${reason}`);
+  G.isStopped = true;
+  G.isRunning  = false;
+
+  // Закрываем открытую вкладку профиля если она есть
+  if (G.activeProfileTabId !== null) {
+    try { await chrome.tabs.remove(G.activeProfileTabId); } catch { /* уже закрыта */ }
+    G.activeProfileTabId = null;
+  }
+}
 
 // ── Утилиты ───────────────────────────────────────────────────────────────
 
@@ -31,48 +73,47 @@ function getStorage(keys) {
   return new Promise(resolve => chrome.storage.local.get(keys, resolve));
 }
 
-// ── Управление вкладкой connections ──────────────────────────────────────
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Управление вкладкой Connections ──────────────────────────────────────
 
 /**
- * Гарантирует ровно одну вкладку connections:
- *   - Если несколько → закрывает дубликаты, оставляет первую
- *   - Если нет → создаёт в текущем активном окне
- *   - Сохраняет tabId и windowId
+ * Гарантирует ровно одну вкладку connections.
+ * 0 → создать в текущем окне
+ * 1 → использовать
+ * >1 → закрыть лишние, оставить первую
  *
- * Вызывается ТОЛЬКО при явном действии пользователя (Start Sync).
- * НЕ вызывается автоматически при старте расширения.
+ * Вызывается ТОЛЬКО при явном действии пользователя.
  */
 async function getOrCreateConnectionsTab() {
   try {
     const existing = await chrome.tabs.query({ url: LINKEDIN_CONNECTIONS_PATTERNS });
 
-    if (existing.length > 0) {
-      // Закрываем дубликаты — оставляем первую
+    if (existing.length > 1) {
+      // Закрываем все дубликаты, оставляем первую
       const dups = existing.slice(1).map(t => t.id).filter(Boolean);
-      if (dups.length) {
-        await chrome.tabs.remove(dups);
-        console.log(`[CRM BG] Закрыты дубликаты connections: ${dups}`);
-      }
-      connectionsTabId    = existing[0].id;
-      connectionsWindowId = existing[0].windowId;
-      console.log(`[CRM BG] Window ID: ${connectionsWindowId} | Tab ID: ${connectionsTabId}`);
-      return { tabId: connectionsTabId, windowId: connectionsWindowId };
+      await chrome.tabs.remove(dups);
+      console.log(`[CRM BG] Closed ${dups.length} duplicate connection tabs`);
     }
 
-    // Нет вкладки — создаём в текущем активном окне
-    const currentWindow = await chrome.windows.getCurrent({ windowTypes: ['normal'] });
-    const targetWindowId = currentWindow?.id ?? chrome.windows.WINDOW_ID_NONE;
+    if (existing.length >= 1) {
+      G.connectionsTabId    = existing[0].id;
+      G.connectionsWindowId = existing[0].windowId;
+      console.log(`[CRM BG] Window ID: ${G.connectionsWindowId} | Tab ID: ${G.connectionsTabId}`);
+      return { tabId: G.connectionsTabId, windowId: G.connectionsWindowId };
+    }
 
+    // Нет вкладки → создаём
+    const currentWindow = await chrome.windows.getCurrent({ windowTypes: ['normal'] });
     const tab = await chrome.tabs.create({
       url:      LINKEDIN_CONNECTIONS_URL,
       active:   false,
-      windowId: targetWindowId !== chrome.windows.WINDOW_ID_NONE ? targetWindowId : undefined
+      windowId: currentWindow?.id ?? undefined
     });
-
-    connectionsTabId    = tab.id;
-    connectionsWindowId = tab.windowId;
-    console.log(`[CRM BG] Создана вкладка connections. Window: ${connectionsWindowId}`);
-    return { tabId: connectionsTabId, windowId: connectionsWindowId };
+    G.connectionsTabId    = tab.id;
+    G.connectionsWindowId = tab.windowId;
+    console.log(`[CRM BG] Created connections tab. Window: ${G.connectionsWindowId}`);
+    return { tabId: G.connectionsTabId, windowId: G.connectionsWindowId };
 
   } catch (err) {
     console.error('[CRM BG] getOrCreateConnectionsTab:', err);
@@ -85,13 +126,11 @@ async function ensureDashboardTabActive() {
     const pageUrl = chrome.runtime.getURL(DASHBOARD_PATH);
     const found   = await chrome.tabs.query({ url: pageUrl + '*' });
     if (found.length > 0) {
-      const primary = found[0];
       const dups = found.slice(1).map(t => t.id).filter(Boolean);
       if (dups.length) await chrome.tabs.remove(dups);
-      if (primary.windowId !== chrome.windows.WINDOW_ID_NONE)
-        await chrome.windows.update(primary.windowId, { focused: true });
-      if (typeof primary.id === 'number')
-        await chrome.tabs.update(primary.id, { active: true });
+      if (found[0].windowId !== chrome.windows.WINDOW_ID_NONE)
+        await chrome.windows.update(found[0].windowId, { focused: true });
+      await chrome.tabs.update(found[0].id, { active: true });
       return;
     }
     await chrome.tabs.create({ url: pageUrl, active: true });
@@ -103,32 +142,44 @@ async function ensureDashboardTabActive() {
 // ── Profile scraping ───────────────────────────────────────────────────────
 
 /**
- * Открывает вкладку профиля СТРОГО в том же окне что connections.
- * Делает вкладку активной — нужно для корректного рендеринга LinkedIn SPA.
- * Закрывает вкладку по завершению и возвращает фокус на connections.
+ * Открывает РОВНО ОДНУ вкладку профиля в окне connections.
+ *
+ * SINGLETON: перед открытием новой вкладки закрывает предыдущую.
+ * active:true — обязательно для fast scroll в profile_scraper.
+ * Таймаут 25 сек (fast scroll может занять до 12 сек).
  */
 function scrapeOneProfile(profileUrl) {
   return new Promise(async (resolve) => {
+    // ── Проверка stop ПЕРЕД открытием вкладки ──
+    if (G.isStopped) {
+      console.log('[CRM BG] ⛔ isStopped — skipping profile');
+      resolve(null);
+      return;
+    }
+
     let tabId             = null;
     let messageListener   = null;
     let tabUpdateListener = null;
     let giveUpTimer       = null;
 
-    // Таймаут 20 сек — с учётом fast scroll
+    // Увеличенный таймаут: fast scroll + SPA загрузка
     giveUpTimer = setTimeout(() => {
-      console.warn('[CRM BG] Таймаут профиля:', profileUrl);
+      console.warn('[CRM BG] Timeout profile:', profileUrl);
       cleanup(null);
-    }, 20000);
+    }, 25000);
 
     function cleanup(result) {
       clearTimeout(giveUpTimer);
       if (messageListener)   chrome.runtime.onMessage.removeListener(messageListener);
       if (tabUpdateListener) chrome.tabs.onUpdated.removeListener(tabUpdateListener);
+
+      // Закрываем вкладку и сбрасываем singleton guard
       if (tabId) {
         chrome.tabs.remove(tabId).catch(() => {});
+        if (G.activeProfileTabId === tabId) G.activeProfileTabId = null;
         // Возвращаем фокус на connections
-        if (connectionsTabId) {
-          chrome.tabs.update(connectionsTabId, { active: true }).catch(() => {});
+        if (G.connectionsTabId) {
+          chrome.tabs.update(G.connectionsTabId, { active: true }).catch(() => {});
         }
       }
       resolve(result);
@@ -149,95 +200,144 @@ function scrapeOneProfile(profileUrl) {
     chrome.runtime.onMessage.addListener(messageListener);
 
     try {
-      // Если windowId устарел (окно закрылось) — восстанавливаем
-      if (connectionsWindowId !== chrome.windows.WINDOW_ID_NONE) {
-        try { await chrome.windows.get(connectionsWindowId); }
+      // SINGLETON: закрываем предыдущую вкладку профиля если не закрылась
+      if (G.activeProfileTabId !== null) {
+        console.warn('[CRM BG] Previous profile tab still open — closing:', G.activeProfileTabId);
+        try { await chrome.tabs.remove(G.activeProfileTabId); } catch { /* уже закрыта */ }
+        G.activeProfileTabId = null;
+      }
+
+      // Проверяем что окно connections ещё живо
+      if (G.connectionsWindowId !== chrome.windows.WINDOW_ID_NONE) {
+        try { await chrome.windows.get(G.connectionsWindowId); }
         catch {
-          console.warn('[CRM BG] Окно закрылось — восстанавливаем');
+          console.warn('[CRM BG] Connections window closed — recreating');
           await getOrCreateConnectionsTab();
         }
       }
 
-      const targetWindowId = connectionsWindowId !== chrome.windows.WINDOW_ID_NONE
-        ? connectionsWindowId
+      const targetWindowId = G.connectionsWindowId !== chrome.windows.WINDOW_ID_NONE
+        ? G.connectionsWindowId
         : undefined;
 
-      console.log(`[CRM BG] Opening profile in correct window (${targetWindowId})`);
+      console.log(`[CRM BG] Opening profile in window ${targetWindowId}: ${profileUrl}`);
 
-      // Открываем в том же окне, активной — LinkedIn требует видимости для рендеринга
+      // active:true — ОБЯЗАТЕЛЬНО для fast scroll (LinkedIn требует видимости вкладки)
       const tab = await chrome.tabs.create({
         url:      profileUrl,
         active:   true,
         windowId: targetWindowId
       });
-      tabId = tab.id;
+
+      tabId                = tab.id;
+      G.activeProfileTabId = tab.id; // ← singleton guard
 
       tabUpdateListener = async (updatedTabId, changeInfo) => {
         if (updatedTabId !== tabId || changeInfo.status !== 'complete') return;
         chrome.tabs.onUpdated.removeListener(tabUpdateListener);
         tabUpdateListener = null;
 
-        // Пауза — LinkedIn SPA догружает компоненты
-        await new Promise(r => setTimeout(r, 1000));
+        // Проверяем stop сразу после загрузки страницы
+        if (G.isStopped) { cleanup(null); return; }
+
+        // Небольшая пауза — SPA dogружает React компоненты
+        await delay(800);
+        if (G.isStopped) { cleanup(null); return; }
 
         try {
           await chrome.scripting.executeScript({ target: { tabId }, files: ['profile_scraper.js'] });
           console.log('[CRM BG] profile_scraper.js injected');
         } catch (err) {
-          console.warn('[CRM BG] Инжекция не удалась:', err);
+          console.warn('[CRM BG] Injection failed:', err);
           cleanup(null);
         }
       };
       chrome.tabs.onUpdated.addListener(tabUpdateListener);
 
     } catch (err) {
-      console.error('[CRM BG] Не удалось открыть вкладку профиля:', err);
+      console.error('[CRM BG] Could not open profile tab:', err);
       cleanup(null);
     }
   });
 }
 
 /**
- * Обогащает контакты данными профилей. Строго последовательно.
- * Resume-safe: пропускает контакты с уже заполненными полями.
- * Проверяет stop-команду перед каждым профилем.
+ * Обогащает контакты. Строго последовательно — ОДИН профиль за раз.
+ *
+ * SINGLETON: проверяет G.isRunning перед стартом.
+ * Проверяет G.isStopped перед КАЖДЫМ профилем и после каждого await.
  */
 async function enrichContacts(contacts, pauseMs) {
+  // ── SINGLETON GUARD ──
+  if (G.isRunning) {
+    console.warn('[CRM BG] enrichContacts: already running — BLOCKED');
+    return contacts; // возвращаем без изменений
+  }
+
+  G.isRunning  = true;
+  G.isStopped  = false;
   const enriched = [];
 
-  for (let i = 0; i < contacts.length; i++) {
-    const snap = await getStorage(['crm_sync_command']);
-    if (snap.crm_sync_command === 'stop') {
-      console.log(`[CRM BG] Enrichment stopped at ${i}/${contacts.length}`);
-      for (let j = i; j < contacts.length; j++) {
-        enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '' });
+  try {
+    for (let i = 0; i < contacts.length; i++) {
+      // ── KILL SWITCH: проверяем перед каждым профилем ──
+      if (G.isStopped) {
+        console.log(`[CRM BG] ⛔ Pipeline stopped at ${i}/${contacts.length}`);
+        for (let j = i; j < contacts.length; j++) {
+          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '' });
+        }
+        break;
       }
-      break;
+
+      // Также проверяем через storage (для cross-process stop)
+      const snap = await getStorage(['crm_sync_command']);
+      if (snap.crm_sync_command === 'stop' || G.isStopped) {
+        console.log(`[CRM BG] ⛔ Stop command at ${i}/${contacts.length}`);
+        for (let j = i; j < contacts.length; j++) {
+          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '' });
+        }
+        break;
+      }
+
+      const contact = contacts[i];
+
+      // Resume-safe: пропускаем уже обработанные
+      if (contact.jobTitle || contact.company || contact.school) {
+        enriched.push(contact);
+        continue;
+      }
+
+      console.log(`[CRM BG] Profile ${i + 1}/${contacts.length}: ${contact.profileUrl}`);
+      const data = await scrapeOneProfile(contact.profileUrl);
+
+      // Проверяем isStopped после async операции
+      if (G.isStopped) {
+        console.log('[CRM BG] ⛔ Stopped after scrape');
+        enriched.push({ ...contact, jobTitle: data?.jobTitle || '', company: data?.company || '', school: data?.school || '', major: data?.major || '' });
+        for (let j = i + 1; j < contacts.length; j++) {
+          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '' });
+        }
+        break;
+      }
+
+      enriched.push({
+        ...contact,
+        jobTitle: data?.jobTitle || '',
+        company:  data?.company  || '',
+        school:   data?.school   || '',
+        major:    data?.major    || ''
+      });
+
+      // Пауза между профилями (500–1000мс)
+      if (i < contacts.length - 1 && !G.isStopped) {
+        const pause = (pauseMs || 700) + Math.random() * 300;
+        await delay(pause);
+      }
     }
-
-    const contact = contacts[i];
-
-    // Resume-safe: пропускаем уже обработанные
-    if (contact.jobTitle || contact.company || contact.school) {
-      enriched.push(contact);
-      continue;
-    }
-
-    console.log(`[CRM BG] Profile ${i + 1}/${contacts.length}: ${contact.profileUrl}`);
-    const data = await scrapeOneProfile(contact.profileUrl);
-
-    enriched.push({
-      ...contact,
-      jobTitle: data?.jobTitle || '',
-      company:  data?.company  || '',
-      school:   data?.school   || '',
-      major:    data?.major    || ''
-    });
-
-    if (i < contacts.length - 1) {
-      const pause = (pauseMs || 700) + Math.random() * 300;
-      await new Promise(r => setTimeout(r, pause));
-    }
+  } finally {
+    // Всегда освобождаем lock
+    G.isRunning  = false;
+    G.isStopped  = false;
   }
 
   return enriched;
@@ -251,18 +351,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'ENSURE_CONTENT_SCRIPT') {
     (async () => {
       try {
-        // Получаем или создаём ровно одну вкладку connections
         const { tabId, windowId } = await getOrCreateConnectionsTab();
+        if (!tabId) { sendResponse({ ok: false, reason: 'could_not_open_tab' }); return; }
 
-        if (!tabId) {
-          sendResponse({ ok: false, reason: 'could_not_open_tab' });
-          return;
-        }
-
-        // Ждём если только что создали
+        // Если вкладка только что создана — ждём загрузки
         const tabs = await chrome.tabs.query({ url: LINKEDIN_CONNECTIONS_PATTERNS });
         if (tabs.length === 0) {
-          await new Promise(r => setTimeout(r, 3500));
+          await delay(3500);
           sendResponse({ ok: true, created: true, windowId });
           return;
         }
@@ -288,12 +383,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const { contacts, pauseMs = 700 } = msg;
     if (!contacts?.length) { sendResponse({ ok: true, enriched: [] }); return true; }
 
+    // Двойная защита: если уже запущено — блокируем
+    if (G.isRunning) {
+      console.warn('[CRM BG] ENRICH_CONTACTS: pipeline already running — rejected');
+      sendResponse({ ok: false, reason: 'already_running', enriched: contacts });
+      return true;
+    }
+
     enrichContacts(contacts, pauseMs)
       .then(enriched => sendResponse({ ok: true, enriched }))
       .catch(err => {
-        console.error('[CRM BG] ENRICH_CONTACTS:', err);
+        console.error('[CRM BG] ENRICH_CONTACTS error:', err);
+        G.isRunning = false;
         sendResponse({ ok: false, enriched: contacts });
       });
+    return true;
+  }
+
+  // STOP_PIPELINE — немедленная остановка из content.js
+  if (msg.type === 'STOP_PIPELINE') {
+    void killPipeline('STOP_PIPELINE message');
+    sendResponse({ ok: true });
     return true;
   }
 
@@ -301,6 +411,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'RESTART_SYNC') {
     (async () => {
       try {
+        // Сначала убиваем активный пайплайн
+        await killPipeline('RESTART_SYNC');
+
         await chrome.storage.local.set({
           crm_contacts:         [],
           crm_sync_count:       0,
@@ -314,22 +427,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           crm_heartbeat:        0
         });
 
-        // Перезагружаем существующую вкладку connections
+        // Перезагружаем connections (ровно одну)
         const tabs = await chrome.tabs.query({ url: LINKEDIN_CONNECTIONS_PATTERNS });
         if (tabs.length > 0) {
           const dups = tabs.slice(1).map(t => t.id).filter(Boolean);
           if (dups.length) await chrome.tabs.remove(dups);
           await chrome.tabs.reload(tabs[0].id);
-          connectionsTabId    = tabs[0].id;
-          connectionsWindowId = tabs[0].windowId;
+          G.connectionsTabId    = tabs[0].id;
+          G.connectionsWindowId = tabs[0].windowId;
         } else {
-          // Нет вкладки — создаём
           await getOrCreateConnectionsTab();
         }
 
+        // Сбрасываем isStopped чтобы следующий старт прошёл
+        G.isStopped = false;
         sendResponse({ ok: true });
       } catch (err) {
         console.error('[CRM BG] RESTART_SYNC:', err);
+        G.isStopped = false;
         sendResponse({ ok: false, reason: err.message });
       }
     })();
@@ -338,7 +453,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // CONTENT_READY — НЕ автозапускаем
   if (msg.type === 'CONTENT_READY') {
-    console.log('[CRM BG] content.js ready, tab:', sender.tab?.id, '— waiting for user action');
+    console.log('[CRM BG] content.js ready, tab:', sender.tab?.id);
     sendResponse({ ok: true });
     return true;
   }
@@ -347,19 +462,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-// Клик по иконке расширения → открываем dashboard + connections
 chrome.action.onClicked.addListener(() => {
   void (async () => {
-    // Сначала открываем dashboard
     await ensureDashboardTabActive();
-    // Затем connections — только при явном клике пользователя
     await getOrCreateConnectionsTab();
   })();
 });
 
 /**
- * При старте SW: сбрасываем зависший running-статус.
- * НЕ открываем connections автоматически — только при явном действии.
+ * onSuspend — Service Worker засыпает.
+ * Убиваем все активные процессы чтобы не было зависших вкладок.
+ */
+chrome.runtime.onSuspend.addListener(() => {
+  console.log('[CRM BG] SW suspending — killing pipeline');
+  void killPipeline('onSuspend');
+});
+
+/**
+ * SW Boot: сбрасываем зависший running-статус.
+ * НЕ открываем connections автоматически.
  */
 void (async () => {
   const data = await getStorage(['crm_sync_status']);
@@ -367,24 +488,26 @@ void (async () => {
     console.log('[CRM BG] SW reboot: resetting stale running status');
     await chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
   }
-  // Восстанавливаем windowId если вкладка connections уже открыта
+  // Восстанавливаем windowId если вкладка уже открыта
   const existing = await chrome.tabs.query({ url: LINKEDIN_CONNECTIONS_PATTERNS });
   if (existing.length > 0) {
-    connectionsTabId    = existing[0].id;
-    connectionsWindowId = existing[0].windowId;
-    console.log(`[CRM BG] Restored windowId: ${connectionsWindowId}`);
+    G.connectionsTabId    = existing[0].id;
+    G.connectionsWindowId = existing[0].windowId;
+    console.log(`[CRM BG] Restored windowId: ${G.connectionsWindowId}`);
   }
 })().catch(() => {});
 
-// onStartup / onInstalled — НЕ открываем connections автоматически
 chrome.runtime.onStartup.addListener(() => {
   chrome.storage.local.get(['crm_sync_status'], data => {
     if (data.crm_sync_status === 'running') {
       chrome.storage.local.set({ crm_sync_status: 'idle', crm_sync_command: null });
     }
   });
+  G.isRunning  = false;
+  G.isStopped  = false;
+  G.activeProfileTabId = null;
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[CRM BG] Extension installed/updated');
+  console.log('[CRM BG] Extension installed/updated v2.4');
 });

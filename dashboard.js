@@ -1,5 +1,5 @@
 /**
- * dashboard.js — LinkedIn CRM v2.3
+ * dashboard.js — LinkedIn CRM v2.4
  *
  * UI полностью на английском.
  * Вкладки: Sync | Search (с отраслями) | Help (FAQ + видео) | Contacts (soon)
@@ -152,15 +152,7 @@
     if (countEl) {
       // Метка "Collected X of Y" приходит из content.js (crm_sync_label)
       // но там текст на русском — генерируем свой английский
-      if (label && label.startsWith('Собрано')) {
-        var m = label.match(/(\d+)\s*из\s*(\d+)/);
-        var m2 = label.match(/Собрано\s+(\d+)$/);
-        if (m) countEl.textContent = 'Collected ' + m[1] + ' of ' + m[2];
-        else if (m2) countEl.textContent = 'Collected ' + m2[1];
-        else countEl.textContent = label;
-      } else {
-        countEl.textContent = label || (total ? 'Collected ' + count + ' of ' + total : String(count));
-      }
+      countEl.textContent = label || (total ? 'Collected ' + count + ' of ' + total : String(count));
     }
 
     if (etaEl && etaTextEl) {
