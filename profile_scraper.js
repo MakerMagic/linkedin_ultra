@@ -1,11 +1,19 @@
 /**
  * profile_scraper.js — LinkedIn CRM v2.5
  *
- * БАГ 1 FIX — Скролл профиля:
- *   fastScroll() → forceScrollProfile()
- *   Логика: 3с инициализация → ровно 5 скроллов по 600мс.
- *   НЕ ждём полной загрузки, НЕ проверяем высоту.
- *   Вкладка должна быть active:true (background.js уже делает это).
+ * Инжектируется ПОСЛЕ того как background.js уже выполнил фиксированный scroll
+ * (5 итераций × 600мс через executeScript func).
+ * К этому моменту секции Experience/Education уже подгружены.
+ *
+ * Задача скрипта: только ПАРСИНГ, не скролл.
+ *
+ * Логика парсинга (по ТЗ):
+ *   - componentKey: ExperienceTopLevelSection / EducationTopLevelSection
+ *   - Fallback: заголовок h2 ("Опыт", "Образование", "Experience", "Education")
+ *   - Все <a> в секции → игнорируем первый (иконка) → берём второй/последний
+ *   - a.querySelectorAll("p") → p[0]=jobTitle, p[1]=company (Experience)
+ *                             → p[0]=school,   p[1]=major   (Education)
+ *   - Пустые значения = ""
  */
 (function () {
   'use strict';
@@ -19,29 +27,13 @@
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
-  // ── Forced scroll (БАГ 1 FIX) ─────────────────────────────────────────
-
-  /**
-   * Принудительный скролл профиля.
-   * LinkedIn НЕ прогружает секции без скролла видимой вкладки.
-   * Решение: 3с ждём инициализацию → 5 скроллов с паузой 600мс.
-   * БЕЗ проверки высоты, БЕЗ ожидания "конца страницы".
-   */
-  async function forceScrollProfile() {
-    // Ждём 3 секунды — LinkedIn инициализирует React-компоненты
-    await new Promise(r => setTimeout(r, 3000));
-
-    // Ровно 5 скроллов вниз, задержка 600мс между ними
-    for (let i = 0; i < 5; i++) {
-      window.scrollTo(0, document.body.scrollHeight);
-      await new Promise(r => setTimeout(r, 600));
-    }
-
-    console.log('[CRM Scraper] ✅ Forced scroll executed (5 steps)');
-  }
-
   // ── Ожидание секций ────────────────────────────────────────────────────
 
+  /**
+   * Ждём секции с помощью MutationObserver + polling.
+   * Scroll уже выполнен background.js — секции должны появиться быстро.
+   * Таймаут 8 сек на случай медленного соединения.
+   */
   function waitForSections(timeoutMs) {
     return new Promise(resolve => {
       function isReady() {
@@ -66,7 +58,7 @@
       const pollId = setInterval(() => { if (isReady()) finish(); }, 300);
       const obs    = new MutationObserver(() => { if (isReady()) finish(); });
       obs.observe(document.body, { childList: true, subtree: true });
-      const timer  = setTimeout(finish, timeoutMs || 10000);
+      const timer  = setTimeout(finish, timeoutMs || 8000);
     });
   }
 
@@ -76,7 +68,7 @@
     let experienceSection = null;
     let educationSection  = null;
 
-    // Метод 1: componentKey
+    // Метод 1: componentKey (приоритет)
     for (const el of document.querySelectorAll('[componentKey],[componentkey]')) {
       const ck = (el.getAttribute('componentKey') || el.getAttribute('componentkey') || '').toLowerCase();
       if (!experienceSection && ck.includes('experience')) {
@@ -89,7 +81,7 @@
       }
     }
 
-    // Метод 2: заголовок (русский/английский)
+    // Метод 2: заголовок h2/h3 (fallback для русского UI)
     if (!experienceSection || !educationSection) {
       for (const h of document.querySelectorAll('h2,h3,[id]')) {
         const text = (h.textContent || '').trim().toLowerCase();
@@ -118,21 +110,32 @@
 
   // ── Проверка: иконка-ссылка ────────────────────────────────────────────
 
+  /**
+   * Первый <a> в секции — иконка компании (svg/img без <p>).
+   * Такие ссылки игнорируем.
+   */
   function isIconLink(a) {
-    return (a.querySelector('svg') || a.querySelector('img')) && !a.querySelector('p');
+    return !!(a.querySelector('svg') || a.querySelector('img')) && !a.querySelector('p');
   }
 
   // ── Выбор нужной ссылки ────────────────────────────────────────────────
 
+  /**
+   * По ТЗ: берём все <a>, пропускаем первый (иконка), берём второй (индекс 1).
+   * Если второй отсутствует — берём последний.
+   */
   function getTargetLink(section) {
     if (!section) return null;
     const links = Array.from(section.querySelectorAll('a'));
     console.log(`[CRM Scraper] Links in section: ${links.length}`);
 
+    // Убираем иконки
     const meaningful = links.filter(a => !isIconLink(a));
     console.log(`[CRM Scraper] Meaningful links: ${meaningful.length}`);
 
     if (meaningful.length === 0) return null;
+
+    // Берём второй (index 1) — если только один, берём его
     return meaningful.length >= 2 ? meaningful[1] : meaningful[meaningful.length - 1];
   }
 
@@ -149,11 +152,13 @@
 
     const { experienceSection, educationSection } = findSections();
 
-    // Experience: p[0]=jobTitle, p[1]=company
+    // ── Experience: p[0]=jobTitle, p[1]=company ──
     if (experienceSection) {
       const link = getTargetLink(experienceSection);
       if (link) {
-        const paras = Array.from(link.querySelectorAll('p')).map(p => cleanText(p)).filter(Boolean);
+        const paras = Array.from(link.querySelectorAll('p'))
+          .map(p => cleanText(p))
+          .filter(Boolean);
         console.log('[CRM Scraper] Experience paragraphs:', paras);
         if (paras[0]) jobTitle = paras[0];
         if (paras[1]) company  = paras[1];
@@ -164,11 +169,13 @@
       console.warn('[CRM Scraper] ⚠️ Experience section not found');
     }
 
-    // Education: p[0]=school, p[1]=major
+    // ── Education: p[0]=school, p[1]=major ──
     if (educationSection) {
       const link = getTargetLink(educationSection);
       if (link) {
-        const paras = Array.from(link.querySelectorAll('p')).map(p => cleanText(p)).filter(Boolean);
+        const paras = Array.from(link.querySelectorAll('p'))
+          .map(p => cleanText(p))
+          .filter(Boolean);
         console.log('[CRM Scraper] Education paragraphs:', paras);
         if (paras[0]) school = paras[0];
         if (paras[1]) major  = paras[1];
@@ -179,7 +186,7 @@
       console.warn('[CRM Scraper] ⚠️ Education section not found');
     }
 
-    // Fallback: occupation subtitle в шапке
+    // ── Fallback: occupation subtitle в шапке профиля ──
     if (!jobTitle && !company && !school) {
       const el =
         document.querySelector('.pv-text-details__left-panel .text-body-medium') ||
@@ -198,27 +205,23 @@
     }
 
     const result = { jobTitle, company, school, major };
-    console.log('[CRM Scraper] Final result:', result);
+    console.log('[CRM Scraper] Profile parsed:', result);
     return result;
   }
 
   // ── Основной поток ─────────────────────────────────────────────────────
-  // PIPELINE: forceScrollProfile → waitForSections → scrapeProfile → sendMessage
 
   (async () => {
-    // 1. Forced scroll (БАГ 1 FIX) — 3с + 5 итераций по 600мс
-    await forceScrollProfile();
-
-    // 2. Ждём секций (MutationObserver + polling)
+    // Ждём секций (scroll уже сделан background.js до инжекта этого скрипта)
     await waitForSections(8000);
 
-    // 3. Небольшая пауза после скролла
-    await new Promise(r => setTimeout(r, 500));
+    // Небольшая пауза — React может батчить финальные обновления
+    await new Promise(r => setTimeout(r, 400));
 
-    // 4. Парсим
+    // Парсим
     const result = scrapeProfile();
 
-    // 5. Отправляем в background.js
+    // Отправляем в background.js
     if (chrome.runtime?.id) {
       chrome.runtime.sendMessage({ type: 'PROFILE_DATA', data: result, url: location.href })
         .catch(err => console.warn('[CRM Scraper] sendMessage error:', err));
