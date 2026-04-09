@@ -1,16 +1,11 @@
 /**
- * profile_scraper.js — LinkedIn CRM v2.4
+ * profile_scraper.js — LinkedIn CRM v2.5
  *
- * Парсинг по ТЗ:
- *   - componentKey: ExperienceTopLevelSection / EducationTopLevelSection
- *   - Fallback (русский UI): "Опыт", "Опыт работы", "Образование"
- *   - Берём все <a> в секции, игнорируем первый (иконка), берём второй / последний
- *   - a.querySelectorAll("p") → p[0]=jobTitle, p[1]=company / p[0]=school, p[1]=major
- *   - Пустые значения = "" (не null)
- *
- * Fast scroll:
- *   - window.scrollTo(0, scrollHeight) несколько раз, delay 200–400ms
- *   - до стабилизации scrollHeight
+ * БАГ 1 FIX — Скролл профиля:
+ *   fastScroll() → forceScrollProfile()
+ *   Логика: 3с инициализация → ровно 5 скроллов по 600мс.
+ *   НЕ ждём полной загрузки, НЕ проверяем высоту.
+ *   Вкладка должна быть active:true (background.js уже делает это).
  */
 (function () {
   'use strict';
@@ -24,33 +19,25 @@
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
-  // ── Fast scroll ────────────────────────────────────────────────────────
+  // ── Forced scroll (БАГ 1 FIX) ─────────────────────────────────────────
 
   /**
-   * Быстрый скролл до конца страницы.
-   * LinkedIn лениво рендерит секции — нужно прокрутить чтобы они появились.
-   * Шаг 200–400ms, максимум 6 итераций, стоп при стабилизации высоты.
+   * Принудительный скролл профиля.
+   * LinkedIn НЕ прогружает секции без скролла видимой вкладки.
+   * Решение: 3с ждём инициализацию → 5 скроллов с паузой 600мс.
+   * БЕЗ проверки высоты, БЕЗ ожидания "конца страницы".
    */
-  async function fastScroll() {
-    console.log('[CRM Scraper] Fast scroll started');
-    let prevHeight = -1;
-    let iterations = 0;
+  async function forceScrollProfile() {
+    // Ждём 3 секунды — LinkedIn инициализирует React-компоненты
+    await new Promise(r => setTimeout(r, 3000));
 
-    while (iterations < 6) {
-      const h = document.body.scrollHeight;
-      window.scrollTo(0, h);
-      const delay = 200 + Math.random() * 200;
-      await new Promise(r => setTimeout(r, delay));
-      const newH = document.body.scrollHeight;
-      console.log(`[CRM Scraper] Fast scroll ${iterations + 1}: ${prevHeight} → ${h} → ${newH}`);
-      if (newH === h && iterations > 0) { console.log('[CRM Scraper] Fast scroll completed'); break; }
-      prevHeight = h;
-      iterations++;
+    // Ровно 5 скроллов вниз, задержка 600мс между ними
+    for (let i = 0; i < 5; i++) {
+      window.scrollTo(0, document.body.scrollHeight);
+      await new Promise(r => setTimeout(r, 600));
     }
 
-    // Возвращаемся наверх
-    window.scrollTo(0, 0);
-    await new Promise(r => setTimeout(r, 300));
+    console.log('[CRM Scraper] ✅ Forced scroll executed (5 steps)');
   }
 
   // ── Ожидание секций ────────────────────────────────────────────────────
@@ -129,34 +116,23 @@
     return { experienceSection, educationSection };
   }
 
-  // ── Проверка: иконка ссылка ────────────────────────────────────────────
+  // ── Проверка: иконка-ссылка ────────────────────────────────────────────
 
-  /**
-   * Первый <a> в секции = иконка компании (содержит svg/img но не содержит <p>).
-   */
   function isIconLink(a) {
     return (a.querySelector('svg') || a.querySelector('img')) && !a.querySelector('p');
   }
 
   // ── Выбор нужной ссылки ────────────────────────────────────────────────
 
-  /**
-   * По ТЗ: берём все <a>, игнорируем первый (иконка), берём второй/последний.
-   * "Второй" означает второй в порядке DOM — для актуальной записи.
-   * Если второй отсутствует — берём последний.
-   */
   function getTargetLink(section) {
     if (!section) return null;
     const links = Array.from(section.querySelectorAll('a'));
     console.log(`[CRM Scraper] Links in section: ${links.length}`);
 
-    // Фильтруем иконки
     const meaningful = links.filter(a => !isIconLink(a));
     console.log(`[CRM Scraper] Meaningful links: ${meaningful.length}`);
 
     if (meaningful.length === 0) return null;
-
-    // Берём второй (индекс 1) — или последний если только один
     return meaningful.length >= 2 ? meaningful[1] : meaningful[meaningful.length - 1];
   }
 
@@ -173,7 +149,7 @@
 
     const { experienceSection, educationSection } = findSections();
 
-    // ── Experience: p[0]=jobTitle, p[1]=company ──
+    // Experience: p[0]=jobTitle, p[1]=company
     if (experienceSection) {
       const link = getTargetLink(experienceSection);
       if (link) {
@@ -188,7 +164,7 @@
       console.warn('[CRM Scraper] ⚠️ Experience section not found');
     }
 
-    // ── Education: p[0]=school, p[1]=major ──
+    // Education: p[0]=school, p[1]=major
     if (educationSection) {
       const link = getTargetLink(educationSection);
       if (link) {
@@ -203,7 +179,7 @@
       console.warn('[CRM Scraper] ⚠️ Education section not found');
     }
 
-    // ── Fallback: occupation subtitle в шапке ──
+    // Fallback: occupation subtitle в шапке
     if (!jobTitle && !company && !school) {
       const el =
         document.querySelector('.pv-text-details__left-panel .text-body-medium') ||
@@ -221,22 +197,22 @@
       }
     }
 
-    // Пустые значения = "" (не null/undefined)
     const result = { jobTitle, company, school, major };
     console.log('[CRM Scraper] Final result:', result);
     return result;
   }
 
   // ── Основной поток ─────────────────────────────────────────────────────
+  // PIPELINE: forceScrollProfile → waitForSections → scrapeProfile → sendMessage
 
   (async () => {
-    // 1. Fast scroll — загружаем lazy секции
-    await fastScroll();
+    // 1. Forced scroll (БАГ 1 FIX) — 3с + 5 итераций по 600мс
+    await forceScrollProfile();
 
     // 2. Ждём секций (MutationObserver + polling)
     await waitForSections(8000);
 
-    // 3. Пауза после скролла
+    // 3. Небольшая пауза после скролла
     await new Promise(r => setTimeout(r, 500));
 
     // 4. Парсим
