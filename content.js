@@ -125,6 +125,61 @@
     return null;
   }
 
+  function getFirstParagraphText(el) {
+    if (!el) return '';
+    let allText = (el.textContent || '').replace(/\s+/g, ' ').trim();
+
+    // Check for punctuation separators - comma, pipe, period, semicolon, etc.
+    // These indicate the end of name and start of job description
+    const separatorMatch = allText.match(/[,|;].*$/);
+    if (separatorMatch) {
+      // Cut off at the separator
+      allText = allText.substring(0, separatorMatch.index).trim();
+    }
+
+    const words = allText.split(/\s+/);
+
+    // Strategy 1: Try first <p> element
+    const firstP = el.querySelector('p');
+    if (firstP) {
+      let text = (firstP.textContent || '').replace(/\s+/g, ' ').trim();
+      // Check for separators in the <p> text
+      const pSeparator = text.match(/[,|;].*$/);
+      if (pSeparator) {
+        text = text.substring(0, pSeparator.index).trim();
+      }
+      const pWords = text.split(/\s+/);
+      // If first <p> has 2-4 words and no job keywords, use it
+      if (pWords.length >= 2 && pWords.length <= 4 &&
+          !/at\s+|ex-|former|manager|director|engineer|ceo|founder|building|creating|research/i.test(text)) {
+        return text;
+      }
+    }
+
+    // Strategy 2: Look for span or div with name class
+    const nameEl = el.querySelector('[class*="name"], span[title], [class*="title"]');
+    if (nameEl) {
+      let text = (nameEl.textContent || '').replace(/\s+/g, ' ').trim();
+      const nSeparator = text.match(/[,|;].*$/);
+      if (nSeparator) {
+        text = text.substring(0, nSeparator.index).trim();
+      }
+      const nWords = text.split(/\s+/);
+      if (nWords.length >= 2 && nWords.length <= 4) {
+        return text;
+      }
+    }
+
+    // Strategy 3: First 2-4 words only (most aggressive - ignores everything after name)
+    // This handles cases where name and job are in same element without clear separation
+    if (words.length > 3) {
+      // Take only first 2-3 words as name, ignore the rest (job description)
+      return words.slice(0, 3).join(' ');
+    }
+
+    return allText;
+  }
+
   function cleanText(el) {
     if (!el) return '';
     const clone = el.cloneNode(true);
@@ -225,6 +280,13 @@
     return links;
   }
 
+  function splitName(fullName) {
+    if (!fullName) return { firstName: '', lastName: '' };
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+    return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+  }
+
   function extractContact(link) {
     const profileUrl = normalizeProfileUrl(link.getAttribute('href'));
     if (!profileUrl) return null;
@@ -233,13 +295,13 @@
 
     if (!fullName) {
       const el = link.querySelector('[class*="name"], [class*="title-text"], [class*="person-name"]');
-      if (el) fullName = cleanText(el);
+      if (el) fullName = getFirstParagraphText(el);
     }
     if (!fullName) {
       const card = link.closest('li, [class*="card"], [class*="result"], [class*="entity"]');
       if (card) {
         const el = card.querySelector('[class*="name"], [class*="title-text"], .artdeco-entity-lockup__title');
-        if (el) fullName = cleanText(el);
+        if (el) fullName = getFirstParagraphText(el);
       }
     }
     if (!fullName) {
@@ -249,60 +311,29 @@
         if (img) fullName = (img.getAttribute('alt') || '').trim();
       }
     }
-    if (!fullName) fullName = cleanText(link);
+    if (!fullName) fullName = getFirstParagraphText(link);
     if (!fullName || fullName.length < 2) return null;
     if (/^(linkedin|view|see|connect|follow|profile|\d+|message|more|open)$/i.test(fullName)) return null;
 
-    return { profileUrl, fullName, jobTitle: '', company: '', school: '', major: '' };
+    const { firstName, lastName } = splitName(fullName);
+    return { profileUrl, firstName, lastName, jobTitle: '', company: '', school: '', major: '' };
   }
 
-  function harvestNewContacts() {
+  function harvestNewContacts(existingUrls) {
     const fresh = [];
     for (const link of findProfileLinks()) {
       const contact = extractContact(link);
       if (!contact) continue;
       if (seenUrls.has(contact.profileUrl)) continue;
       seenUrls.add(contact.profileUrl);
+      if (existingUrls && existingUrls.has(contact.profileUrl)) {
+        console.log(`[CRM] Skipping duplicate (resume): ${contact.profileUrl}`);
+        continue;
+      }
       fresh.push(contact);
     }
     return fresh;
   }
-
-  // =====================================================================
-  // ОБОГАЩЕНИЕ ЧЕРЕЗ BACKGROUND
-  // =====================================================================
-
-  function enrichBatch(batch, token) {
-    return new Promise(resolve => {
-      if (token.cancelled || !batch.length) { resolve(batch); return; }
-      if (!chrome.runtime?.id) { resolve(batch); return; }
-
-      const sessionAtSend = syncSessionId;
-
-      chrome.runtime.sendMessage(
-        { type: 'ENRICH_CONTACTS', contacts: batch, pauseMs: CFG.profilePauseMs },
-        response => {
-          // Сессия сменилась → старый ответ игнорируем
-          if (syncSessionId !== sessionAtSend) {
-            console.log('[CRM] enrichBatch: stale session — ignoring');
-            resolve(batch);
-            return;
-          }
-          if (chrome.runtime.lastError || !response?.ok) {
-            // already_running — тоже возвращаем исходный batch
-            console.warn('[CRM] Enrichment failed:', chrome.runtime.lastError?.message || response?.reason);
-            resolve(batch);
-            return;
-          }
-          resolve(response.enriched || batch);
-        }
-      );
-    });
-  }
-
-  // =====================================================================
-  // ОЖИДАНИЕ НОВЫХ КАРТОЧЕК
-  // =====================================================================
 
   function waitForNewCards(currentCount, timeoutMs, token) {
     return new Promise((resolve, reject) => {
@@ -349,7 +380,6 @@
     if (phase === 'stopped') percent = total ? Math.min(95, percent) : Math.min(50, percent);
 
     const displayCount = (phase === 'done' && total) ? total : collected;
-    // Метка на английском — dashboard.js покажет её напрямую
     const label = total
       ? `Collected ${displayCount} of ${total}`
       : `Collected ${collected}`;
@@ -395,7 +425,19 @@
     startHeartbeat();
     _cachedScrollContainer = null;
 
-    let allContacts = [];
+    // ── RESUME: Load existing contacts from storage ──
+    let existingContacts = [];
+    let existingUrls = new Set();
+    try {
+      const data = await chrome.storage.local.get(['crm_contacts']);
+      existingContacts = data.crm_contacts || [];
+      existingUrls = new Set(existingContacts.map(c => c.profileUrl).filter(Boolean));
+      console.log(`[CRM] Resume: loaded ${existingContacts.length} existing contacts`);
+    } catch (e) {
+      console.warn('[CRM] Failed to load existing contacts:', e);
+    }
+
+    let allContacts = [...existingContacts];
     let total       = null;
     let emptyCycles = 0;
     let confirmLeft = 0;
@@ -406,18 +448,12 @@
       catch (e) { if (e instanceof CancelledError) { await onStopped(allContacts, null); return; } }
     }
 
-    const firstBatch = harvestNewContacts();
+    const firstBatch = harvestNewContacts(existingUrls);
     total = getTotalFromHeader();
     findScrollContainer();
 
     if (firstBatch.length > 0) {
-      console.log(`[CRM] Enriching first batch (${firstBatch.length})...`);
-      const enriched = await enrichBatch(firstBatch.slice(0, CFG.enrichBatchSize), token);
-      if (token.cancelled) { await onStopped([...allContacts, ...enriched], total); return; }
-      allContacts.push(...enriched);
-      if (firstBatch.length > CFG.enrichBatchSize) {
-        allContacts.push(...firstBatch.slice(CFG.enrichBatchSize));
-      }
+      allContacts.push(...firstBatch);
     }
 
     console.log(`[CRM] First harvest: ${firstBatch.length}. Total: ${total ?? '(not found)'}`);
@@ -464,20 +500,11 @@
         if (f) { total = f; console.log(`[CRM] Total found: ${total}`); }
       }
 
-      const batch = harvestNewContacts();
+      const batch = harvestNewContacts(existingUrls);
 
       if (batch.length > 0) {
         emptyCycles = 0;
-
-        const toEnrich = batch.slice(0, CFG.enrichBatchSize);
-        const enriched = await enrichBatch(toEnrich, token);
-
-        if (token.cancelled) { await onStopped([...allContacts, ...enriched, ...batch.slice(CFG.enrichBatchSize)], total); return; }
-
-        allContacts.push(...enriched);
-        if (batch.length > CFG.enrichBatchSize) {
-          allContacts.push(...batch.slice(CFG.enrichBatchSize));
-        }
+        allContacts.push(...batch);
 
         const pct = total ? `${Math.round(allContacts.length / total * 100)}%` : '?%';
         console.log(`[CRM] +${batch.length} | ${allContacts.length}${total ? `/${total}` : ''} (${pct}) ETA=${calcEtaSeconds(allContacts.length, total) ?? '?'}s`);
@@ -485,9 +512,8 @@
         if (total !== null && (total - allContacts.length) < CFG.nearEndThreshold && (total - allContacts.length) >= 0) {
           console.log(`[CRM] Remainder < ${CFG.nearEndThreshold} — final pass`);
           await new Promise(r => setTimeout(r, 1200));
-          const finalRaw      = harvestNewContacts();
-          const finalEnriched = finalRaw.length > 0 ? await enrichBatch(finalRaw, token) : [];
-          allContacts.push(...finalEnriched);
+          const finalRaw = harvestNewContacts(existingUrls);
+          allContacts.push(...finalRaw);
           console.log(`[CRM] ✓ Final: ${allContacts.length}/${total}`);
           break;
         }

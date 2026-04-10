@@ -210,22 +210,81 @@
               <div class="data-card__header">
                 <h2 id="data-card-title" class="card__title" style="margin-bottom:0">Contacts</h2>
                 <span id="dataCardCount" class="data-card__total"></span>
+                <button type="button" id="btnClearAllData" class="btn btn--micro btn--danger" style="margin-left: auto; font-size: 11px; padding: 4px 10px;">Clear All Data</button>
+              </div>
+
+              <!-- Enrich Controls -->
+              <div class="enrich-bar" id="enrichBar">
+                <div class="enrich-bar__left">
+                  <label class="enrich-select-all">
+                    <input type="checkbox" id="enrichSelectAll" aria-label="Select all">
+                    <span>All</span>
+                  </label>
+                  <div class="enrich-range" id="enrichRangeWrap">
+                    <span class="enrich-range__label">Range</span>
+                    <input type="number" id="enrichRangeFrom" class="enrich-range__input" placeholder="from" min="1">
+                    <span class="enrich-range__sep">—</span>
+                    <input type="number" id="enrichRangeTo" class="enrich-range__input" placeholder="to" min="1">
+                    <button type="button" id="btnEnrichRange" class="btn btn--micro">Select</button>
+                  </div>
+                </div>
+                <div class="enrich-bar__right">
+                  <span class="enrich-stats" id="enrichStats"></span>
+                  <button type="button" id="btnEnrichSelected" class="btn btn--enrich" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                      <path d="M3 3v5h5"/>
+                      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                      <path d="M16 16h5v5"/>
+                    </svg>
+                    Enrich Data
+                  </button>
+                  <button type="button" id="btnEnrichStop" class="btn btn--danger" hidden>Stop</button>
+                </div>
+              </div>
+
+              <!-- Enrich Progress -->
+              <div class="enrich-progress" id="enrichProgress" hidden>
+                <div class="enrich-progress__header">
+                  <span class="enrich-progress__status" id="enrichStatus">Preparing...</span>
+                  <span class="enrich-progress__count" id="enrichCount">0 / 0</span>
+                </div>
+                <div class="enrich-progress__bar">
+                  <div class="enrich-progress__fill" id="enrichFill" style="width: 0%"></div>
+                </div>
               </div>
 
               <div class="table-wrap">
                 <table class="ctable" aria-label="Contacts table">
+                  <colgroup>
+                    <col style="width:  40px">
+                    <col style="width: 48px">
+                    <col style="width: 13%">
+                    <col style="width: 13%">
+                    <col style="width: 14%">
+                    <col style="width: 14%">
+                    <col style="width: 14%">
+                    <col style="width: 13%">
+                    <col style="width: 13%">
+                  </colgroup>
                   <thead>
                     <tr>
+                      <th class="ctable__th--check" scope="col">
+                        <span class="sr-only">Select</span>
+                      </th>
                       <th class="ctable__th--num" scope="col">#</th>
-                      <th scope="col">Name</th>
+                      <th scope="col">First Name</th>
+                      <th scope="col">Last Name</th>
+                      <th scope="col">Profile URL</th>
                       <th scope="col">Job Title</th>
                       <th scope="col">Company</th>
                       <th scope="col">School</th>
+                      <th scope="col">Major</th>
                     </tr>
                   </thead>
                   <tbody id="ctableBody">
                     <tr>
-                      <td colspan="5">
+                      <td colspan="9">
                         <div class="table-empty">
                           <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>

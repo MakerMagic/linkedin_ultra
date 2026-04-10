@@ -286,6 +286,98 @@ function scrapeOneProfile(profileUrl) {
 }
 
 /**
+ * scrapeOneProfileForEnrich — отдельный pipeline для Data таба
+ * Особенности:
+ *   - 7 скроллов × 600мс (вместо 5)
+ *   - 3 сек ожидание перед скроллом
+ */
+function scrapeOneProfileForEnrich(profileUrl) {
+  return new Promise(async (resolve) => {
+    let tabId             = null;
+    let messageListener   = null;
+    let tabUpdateListener = null;
+    let giveUpTimer       = null;
+
+    // Таймаут: 3с инициализация + 7×600мс скролл + запас = 30 сек
+    giveUpTimer = setTimeout(() => {
+      console.warn('[CRM BG] Timeout enrich profile:', profileUrl);
+      cleanup({ jobTitle: '', company: '', school: '', major: '' });
+    }, 30000);
+
+    function cleanup(result) {
+      clearTimeout(giveUpTimer);
+      if (messageListener)   chrome.runtime.onMessage.removeListener(messageListener);
+      if (tabUpdateListener) chrome.tabs.onUpdated.removeListener(tabUpdateListener);
+
+      if (tabId) {
+        chrome.tabs.remove(tabId).catch(() => {});
+      }
+      resolve(result);
+    }
+
+    messageListener = (msg) => {
+      if (msg.type === 'PROFILE_DATA') {
+        cleanup(msg.data || { jobTitle: '', company: '', school: '', major: '' });
+      }
+    };
+    chrome.runtime.onMessage.addListener(messageListener);
+
+    try {
+      const currentWindow = await chrome.windows.getCurrent();
+
+      console.log(`[CRM BG] Enrich: Opening profile in window ${currentWindow?.id}: ${profileUrl}`);
+
+      const tab = await chrome.tabs.create({
+        url:      profileUrl,
+        active:   true,
+        windowId: currentWindow?.id
+      });
+
+      tabId = tab.id;
+
+      tabUpdateListener = async (updatedTabId, changeInfo) => {
+        if (updatedTabId !== tabId || changeInfo.status !== 'complete') return;
+        chrome.tabs.onUpdated.removeListener(tabUpdateListener);
+        tabUpdateListener = null;
+
+        try {
+          // 3 сек ожидание + 7 скроллов
+          console.log('[CRM BG] Enrich: Starting scroll series (7 × 600ms)');
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            func: async () => {
+              await new Promise(r => setTimeout(r, 3000));
+              console.log('[CRM Enrich] Scroll series start (7 scrolls)');
+
+              for (let i = 0; i < 7; i++) {
+                window.scrollTo(0, document.body.scrollHeight);
+                await new Promise(r => setTimeout(r, 600));
+                console.log(`[CRM Enrich] Scroll ${i + 1}/7 done`);
+              }
+
+              console.log('[CRM Enrich] Scroll series complete');
+            }
+          });
+
+          await chrome.scripting.executeScript({ target: { tabId }, files: ['profile_scraper.js'] });
+          console.log('[CRM BG] Enrich: profile_scraper.js injected');
+
+        } catch (err) {
+          console.warn('[CRM BG] Enrich: Injection failed:', err.message);
+          cleanup({ jobTitle: '', company: '', school: '', major: '' });
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(tabUpdateListener);
+
+    } catch (err) {
+      console.error('[CRM BG] Enrich: Could not open profile tab:', err);
+      cleanup({ jobTitle: '', company: '', school: '', major: '' });
+    }
+  });
+}
+
+/**
  * Обогащает контакты. Строго последовательно — ОДИН профиль за раз.
  * ПРАВКА 2: canContinuePipeline() теперь вызывается и здесь (дополнительная проверка).
  */
@@ -381,6 +473,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const { tabId, windowId } = await getOrCreateConnectionsTab();
         if (!tabId) { sendResponse({ ok: false, reason: 'could_not_open_tab' }); return; }
 
+        // Make sure the user sees the Connections list during sync
+        try {
+          if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+            await chrome.windows.update(windowId, { focused: true });
+          }
+          await chrome.tabs.update(tabId, { active: true });
+        } catch (e) {
+          console.warn('[CRM BG] Could not focus connections tab:', e);
+        }
+
         const tabs = await chrome.tabs.query({ url: LINKEDIN_CONNECTIONS_PATTERNS });
         if (tabs.length === 0) {
           await delay(3500);
@@ -421,6 +523,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         G.isRunning = false;
         sendResponse({ ok: false, enriched: contacts });
       });
+    return true;
+  }
+
+  // ENRICH_OPEN_PROFILE — отдельный pipeline для Data таба
+  if (msg.type === 'ENRICH_OPEN_PROFILE') {
+    (async () => {
+      const { profileUrl } = msg;
+      if (!profileUrl) { sendResponse({ ok: false, reason: 'no_url' }); return; }
+
+      // Singleton: не запускаем если уже идёт основной sync
+      if (G.isRunning) {
+        console.warn('[CRM BG] ENRICH_OPEN_PROFILE: sync pipeline running — rejected');
+        sendResponse({ ok: false, reason: 'sync_running' });
+        return;
+      }
+
+      try {
+        const data = await scrapeOneProfileForEnrich(profileUrl);
+        sendResponse({ ok: true, data });
+      } catch (err) {
+        console.error('[CRM BG] ENRICH_OPEN_PROFILE error:', err);
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
     return true;
   }
 
