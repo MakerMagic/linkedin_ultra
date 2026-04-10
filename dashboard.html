@@ -8,8 +8,6 @@
   </head>
   <body>
     <div class="app">
-
-      <!-- ── Sidebar ── -->
       <aside class="nav" aria-label="Main navigation">
         <div class="nav__brand">
           <span class="nav__logo" aria-hidden="true">
@@ -21,44 +19,30 @@
           </span>
           <span class="nav__title">LinkedIn CRM</span>
         </div>
-
         <nav class="nav__list">
 
-          <!-- Leads parent (click = expand subtabs + go to sync) -->
-          <button type="button" class="nav__item nav__item--active nav__item--parent" id="navLeads" aria-current="page">
-            <svg class="nav__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <!-- Leads (was: Sync) -->
+          <button type="button" class="nav__item nav__item--active" data-nav="leads" aria-current="page">
+            <svg class="nav__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
               <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
             Leads
-            <svg class="nav__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
           </button>
 
-          <!-- Subtabs -->
-          <div class="nav__subtabs nav__subtabs--open" id="leadsSubtabs">
-            <button type="button" class="nav__subitem nav__subitem--active" data-subnav="sync">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>
-              </svg>
-              Sync
-            </button>
-            <button type="button" class="nav__subitem" data-subnav="data">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <path d="M3 9h18M3 15h18M9 3v18"/>
-              </svg>
-              Data
-            </button>
-          </div>
+          <!-- Search -->
+          <button type="button" class="nav__item" data-nav="search">
+            <svg class="nav__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+            Search
+          </button>
 
           <!-- Help -->
           <button type="button" class="nav__item" data-nav="help">
-            <svg class="nav__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="help-tip__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10"/>
               <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
               <path d="M12 17h.01"/>
@@ -66,146 +50,260 @@
             Help
           </button>
 
+          <!-- Contacts — soon -->
+          <button type="button" class="nav__item nav__item--soon" data-nav="contacts" disabled title="Coming soon">
+            <svg class="nav__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M8 2v4"/><path d="M16 2v4"/>
+              <path d="M2 10h20"/>
+            </svg>
+            Contacts
+            <span class="nav__badge">soon</span>
+          </button>
+
         </nav>
       </aside>
 
-      <!-- ── Main ── -->
       <main class="main">
 
-        <!-- ── Panel: Sync ── -->
-        <div class="main-panel main-panel--active" data-panel="sync" id="panel-sync">
+        <!-- ══════════════════════════════════════════════
+             Tab: LEADS  (contains Sync + Data sub-tabs)
+        ══════════════════════════════════════════════ -->
+        <div class="main-panel main-panel--active" data-panel="leads" id="panel-leads">
           <header class="main__header">
             <h1 class="main__h1">Leads</h1>
-            <p class="main__sub">Collect and enrich your LinkedIn connections.</p>
+            <p class="main__sub">Sync and browse your LinkedIn connections.</p>
           </header>
 
-          <section class="glass card" aria-labelledby="sync-card-title">
-            <h2 id="sync-card-title" class="card__title">Sync contacts</h2>
-            <p class="card__desc">Scrolls your LinkedIn Connections and collects First Name, Last Name, and Profile URL for each contact. Enrichment is done separately from the Data tab.</p>
+          <!-- ── Sub-tab bar ── -->
+          <div class="leads-tabbar" role="tablist" aria-label="Leads views">
+            <button
+              type="button"
+              class="leads-tab leads-tab--active"
+              data-leads-tab="sync"
+              role="tab"
+              aria-selected="true"
+              aria-controls="leads-panel-sync"
+              id="leads-tab-sync"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                <path d="M16 16h5v5"/>
+              </svg>
+              Sync
+            </button>
+            <button
+              type="button"
+              class="leads-tab"
+              data-leads-tab="data"
+              role="tab"
+              aria-selected="false"
+              aria-controls="leads-panel-data"
+              id="leads-tab-data"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <path d="M3 9h18"/><path d="M3 15h18"/>
+                <path d="M9 3v18"/></svg>
+              Data
+              <span class="leads-tab__badge" id="dataTabBadge" hidden>0</span>
+            </button>
+          </div>
 
-            <div class="sync-layout">
-              <div class="progress-ring" aria-hidden="true">
-                <svg class="progress-ring__svg" viewBox="0 0 120 120">
-                  <defs>
-                    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="#6366f1"/>
-                      <stop offset="100%" stop-color="#8b5cf6"/>
-                    </linearGradient>
-                  </defs>
-                  <circle class="progress-ring__track" cx="60" cy="60" r="52"/>
-                  <circle id="progressArc" class="progress-ring__fill" cx="60" cy="60" r="52"/>
-                </svg>
-                <div class="progress-ring__label">
-                  <span id="progressPercent" class="progress-ring__value">0</span>
-                  <span class="progress-ring__pct">%</span>
+          <!-- ── Sub-panel: Sync ── -->
+          <div
+            class="leads-subpanel leads-subpanel--active"
+            data-leads-panel="sync"
+            id="leads-panel-sync"
+            role="tabpanel"
+            aria-labelledby="leads-tab-sync"
+          >
+            <section class="glass card" aria-labelledby="sync-card-title">
+              <h2 id="sync-card-title" class="card__title">Status</h2>
+
+              <div class="sync-layout">
+                <div class="progress-ring" aria-hidden="true">
+                  <svg class="progress-ring__svg" viewBox="0 0 120 120">
+                    <defs>
+                      <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#6366f1"/>
+                        <stop offset="100%" stop-color="#8b5cf6"/>
+                      </linearGradient>
+                    </defs>
+                    <circle class="progress-ring__track" cx="60" cy="60" r="52"/>
+                    <circle id="progressArc" class="progress-ring__fill" cx="60" cy="60" r="52"/>
+                  </svg>
+                  <div class="progress-ring__label">
+                    <span id="progressPercent" class="progress-ring__value">0</span>
+                    <span class="progress-ring__pct">%</span>
+                  </div>
+                </div>
+
+                <div class="sync-meta">
+                  <p id="syncStatus" class="sync-status">Waiting to start</p>
+                  <p id="syncCount" class="sync-counter__value">0</p>
+
+                  <p id="syncEta" class="sync-eta" hidden>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <span id="syncEtaText"></span>
+                  </p>
+
+                  <div class="sync-actions">
+                    <button type="button" id="btnStart" class="btn btn--primary">Start Sync</button>
+                    <button type="button" id="btnStop"  class="btn btn--ghost" disabled>Stop</button>
+                  </div>
+
+                  <div class="sync-export">
+                    <button type="button" id="btnDownloadCSV" class="btn btn--export" disabled>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      Download CSV
+                    </button>
+                    <p class="sync-hint">Name · URL · Job Title · Company · School · Major</p>
+                  </div>
                 </div>
               </div>
+            </section>
 
-              <div class="sync-meta">
-                <p id="syncStatus" class="sync-status">Waiting to start</p>
-                <p id="syncCount" class="sync-counter__value">0</p>
-
-                <p id="syncEta" class="sync-eta" hidden>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            <!-- Split screen tip -->
+            <div class="splitscreen-tip" id="splitscreenTip">
+              <svg class="splitscreen-tip__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>
+              </svg>
+              <span class="splitscreen-tip__text">
+                Move this tab to split screen — sync will keep working in the background
+              </span>
+              <div class="splitscreen-help">
+                <button type="button" class="splitscreen-help__btn" aria-label="How to use split screen" aria-expanded="false" id="splitscreenHelpBtn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                    <path d="M12 17h.01"/>
                   </svg>
-                  <span id="syncEtaText"></span>
-                </p>
-
-                <div class="sync-actions">
-                  <button type="button" id="btnStart" class="btn btn--primary">Start Sync</button>
-                  <button type="button" id="btnStop"  class="btn btn--ghost" disabled>Stop</button>
+                </button>
+                <div class="splitscreen-help__popover" id="splitscreenPopover" hidden role="tooltip">
+                  <p class="splitscreen-help__title">How to open split screen</p>
+                  <video id="w4m9qx" class="splitscreen-help__video" autoplay loop muted playsinline disablePictureInPicture>
+                    <source id="w4m9qxSrc" src="" type="video/mp4">
+                  </video>
                 </div>
               </div>
             </div>
-          </section>
+          </div><!-- /leads-panel-sync -->
 
-          <!-- Split screen tip -->
-          <div class="splitscreen-tip">
-            <svg class="splitscreen-tip__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>
-            </svg>
-            <span class="splitscreen-tip__text">Move this tab to split screen — sync will keep working in the background</span>
-            <div class="splitscreen-help">
-              <button type="button" class="splitscreen-help__btn" aria-label="How to use split screen" aria-expanded="false" id="splitscreenHelpBtn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <!-- ── Sub-panel: Data ── -->
+          <div
+            class="leads-subpanel"
+            data-leads-panel="data"
+            id="leads-panel-data"
+            role="tabpanel"
+            aria-labelledby="leads-tab-data"
+            hidden
+          >
+            <section class="glass card data-card" aria-labelledby="data-card-title">
+              <div class="data-card__header">
+                <h2 id="data-card-title" class="card__title" style="margin-bottom:0">Contacts</h2>
+                <span id="dataCardCount" class="data-card__total"></span>
+              </div>
+
+              <div class="table-wrap">
+                <table class="ctable" aria-label="Contacts table">
+                  <thead>
+                    <tr>
+                      <th class="ctable__th--num" scope="col">#</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Job Title</th>
+                      <th scope="col">Company</th>
+                      <th scope="col">School</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ctableBody">
+                    <tr>
+                      <td colspan="5">
+                        <div class="table-empty">
+                          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                          </svg>
+                          <div>
+                            <strong>No contacts yet</strong>
+                            Go to the Sync tab and start a sync to collect contacts.
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="table-footer" id="tableFooter" hidden>
+                <span class="table-footer__info" id="paginationInfo"></span>
+                <div class="pagination" id="tablePagination" role="navigation" aria-label="Table pagination"></div>
+              </div>
+            </section>
+          </div><!-- /leads-panel-data -->
+
+        </div><!-- /panel-leads -->
+
+        <!-- ══════════════════════════════════════════════
+             Tab: SEARCH  (unchanged)
+        ══════════════════════════════════════════════ -->
+        <div class="main-panel" data-panel="search" id="panel-search">
+          <header class="main__header main__header--row">
+            <div class="main__header-text">
+              <h1 class="main__h1">Search</h1>
+              <p class="main__sub">Keywords and industries.</p>
+            </div>
+            <div class="help-tip">
+              <button type="button" class="help-tip__btn" aria-label="Help">
+                <svg class="help-tip__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10"/>
                   <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
                   <path d="M12 17h.01"/>
                 </svg>
               </button>
-              <div class="splitscreen-help__popover" id="splitscreenPopover" hidden role="tooltip">
-                <p class="splitscreen-help__title">How to open split screen</p>
-                <video id="w4m9qx" class="splitscreen-help__video" autoplay loop muted playsinline disablePictureInPicture>
-                  <source id="w4m9qxSrc" src="" type="video/mp4">
-                </video>
+              <div class="help-tip__dropdown">
+                <div class="help-tip__popover" role="tooltip">
+                  <p class="help-tip__text">
+                    Enable <button type="button" class="help-tip__link" data-go-sync>sync</button>
+                    to improve results
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── Panel: Data ── -->
-        <div class="main-panel" data-panel="data" id="panel-data">
-          <header class="main__header data-header-row">
-            <div>
-              <h1 class="main__h1">Data</h1>
-              <p class="main__sub">Select contacts and enrich them with job, company, school and major.</p>
-            </div>
-            <div class="data-actions">
-              <button type="button" id="btnSelectAll" class="btn btn--ghost btn--sm">Select All</button>
-              <button type="button" id="btnEnrich" class="btn btn--primary" disabled>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                </svg>
-                Enrich Data
-              </button>
-              <button type="button" id="btnEnrichStop" class="btn btn--ghost btn--sm" disabled>Stop</button>
-              <button type="button" id="btnExportCSV" class="btn btn--export btn--sm" disabled>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                Export CSV
-              </button>
             </div>
           </header>
 
-          <!-- Enrich progress bar -->
-          <div id="enrichProgress" class="enrich-progress" hidden>
-            <div class="enrich-progress__bar">
-              <div id="enrichProgressFill" class="enrich-progress__fill" style="width:0%"></div>
+          <section class="glass card" aria-labelledby="search-card-title">
+            <h2 id="search-card-title" class="card__title">Criteria</h2>
+            <div class="search-form">
+              <label class="field">
+                <span class="field__label">Keywords</span>
+                <input type="search" id="searchKeywords" class="field__input" placeholder="Name, job title, company…" autocomplete="off"/>
+                <span class="field__hint">AI interpretation coming in the next step.</span>
+              </label>
+              <div class="field industry-field" role="group" aria-labelledby="industry-field-label">
+                <span class="field__label" id="industry-field-label">Industries</span>
+                <p class="field__hint" id="industry-field-hint">Multiple selection allowed</p>
+                <div class="tag-select" id="industryTags" aria-label="Industries" aria-describedby="industry-field-hint"></div>
+              </div>
+              <div class="search-actions">
+                <button type="button" id="btnSearch" class="btn btn--primary">Search</button>
+              </div>
             </div>
-            <span id="enrichProgressLabel" class="enrich-progress__label">Enriching 0 / 0…</span>
-          </div>
-
-          <!-- Table -->
-          <div class="table-wrap glass">
-            <table class="data-table" id="dataTable">
-              <thead>
-                <tr>
-                  <th class="col-check"><input type="checkbox" id="checkAll" aria-label="Select all"></th>
-                  <th class="col-name">First Name</th>
-                  <th class="col-name">Last Name</th>
-                  <th class="col-url">Profile URL</th>
-                  <th class="col-field">Job Title</th>
-                  <th class="col-field">Company</th>
-                  <th class="col-field">School</th>
-                  <th class="col-field">Major</th>
-                </tr>
-              </thead>
-              <tbody id="dataTableBody"></tbody>
-            </table>
-            <div id="tableEmpty" class="table-empty" hidden>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-              </svg>
-              <p>No contacts yet.<br>Run <strong>Sync</strong> first to collect your connections.</p>
-            </div>
-          </div>
+          </section>
         </div>
 
-        <!-- ── Panel: Help ── -->
+        <!-- ══════════════════════════════════════════════
+             Tab: HELP  (unchanged)
+        ══════════════════════════════════════════════ -->
         <div class="main-panel" data-panel="help" id="panel-help">
           <header class="main__header">
             <h1 class="main__h1">Help</h1>
@@ -231,24 +329,37 @@
               <div class="faq__item">
                 <button type="button" class="faq__question" aria-expanded="false" aria-controls="faq-a1" id="faq-q1">
                   <span>How many contacts can I safely sync per day?</span>
-                  <svg class="faq__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                  <svg class="faq__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
                 </button>
                 <div class="faq__answer" id="faq-a1" role="region" aria-labelledby="faq-q1" hidden>
                   <div class="faq__answer-inner">
-                    <p>We recommend not exceeding <strong>100 contacts per day</strong> to avoid risks with your LinkedIn account. If captchas appear frequently, pause and reduce contacts per session.</p>
+                    <p>We recommend not exceeding <strong>100 contacts per day</strong> to avoid risks with your LinkedIn account.</p>
+                    <p>If captchas appear frequently:</p>
+                    <ul>
+                      <li>Pause syncing</li>
+                      <li>Reduce the number of contacts per session</li>
+                    </ul>
                   </div>
                 </div>
               </div>
 
               <div class="faq__item">
                 <button type="button" class="faq__question" aria-expanded="false" aria-controls="faq-a2" id="faq-q2">
-                  <span>What's the difference between Sync and Enrich?</span>
-                  <svg class="faq__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                  <span>How does profile enrichment work?</span>
+                  <svg class="faq__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
                 </button>
                 <div class="faq__answer" id="faq-a2" role="region" aria-labelledby="faq-q2" hidden>
                   <div class="faq__answer-inner">
-                    <p><strong>Sync</strong> quickly scrolls your connections list and collects names and profile URLs only — fast and low-risk.</p>
-                    <p><strong>Enrich</strong> opens each selected profile, scrolls it, and extracts Job Title, Company, School, and Major. You choose which contacts to enrich.</p>
+                    <p>After collecting names and profile URLs, the extension opens each profile in the same browser window, fast-scrolls through it, and extracts:</p>
+                    <ul>
+                      <li><strong>Job Title</strong> and <strong>Company</strong> from the Experience section</li>
+                      <li><strong>School</strong> and <strong>Major</strong> from the Education section</li>
+                    </ul>
+                    <p>Each profile takes approximately 4 seconds to process.</p>
                   </div>
                 </div>
               </div>
@@ -256,11 +367,13 @@
               <div class="faq__item">
                 <button type="button" class="faq__question" aria-expanded="false" aria-controls="faq-a3" id="faq-q3">
                   <span>Can I stop and resume later?</span>
-                  <svg class="faq__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                  <svg class="faq__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
                 </button>
                 <div class="faq__answer" id="faq-a3" role="region" aria-labelledby="faq-q3" hidden>
                   <div class="faq__answer-inner">
-                    <p>Yes. Click <strong>Stop</strong> at any time — all data is saved automatically. Click <strong>Start Sync</strong> again to resume — already collected contacts are skipped.</p>
+                    <p>Yes. Click <strong>Stop</strong> at any time — all collected data is saved automatically. Click <strong>Resume Sync</strong> to continue without duplicates.</p>
                   </div>
                 </div>
               </div>
@@ -272,7 +385,7 @@
       </main>
     </div>
 
-    <!-- Restart modal -->
+    <!-- Restart confirmation modal -->
     <div id="restartModal" class="modal-backdrop" hidden aria-modal="true" role="dialog" aria-labelledby="modalTitle">
       <div class="modal-box glass">
         <h2 id="modalTitle" class="modal-title">Start over?</h2>
