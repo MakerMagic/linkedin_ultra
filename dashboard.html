@@ -209,7 +209,6 @@
             <section class="glass card data-card" aria-labelledby="data-card-title">
               <div class="data-card__header">
                 <h2 id="data-card-title" class="card__title" style="margin-bottom:0">Contacts</h2>
-                <span id="dataCardCount" class="data-card__total"></span>
                 <button type="button" id="btnClearAllData" class="btn btn--micro btn--danger" style="margin-left: auto; font-size: 11px; padding: 4px 10px;">Clear All Data</button>
               </div>
 
@@ -227,8 +226,30 @@
                     <input type="number" id="enrichRangeTo" class="enrich-range__input" placeholder="to" min="1">
                     <button type="button" id="btnEnrichRange" class="btn btn--micro">Select</button>
                   </div>
+                  <div class="enrich-search" id="enrichSearchWrap">
+                    <svg class="enrich-search__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                    </svg>
+                    <input type="search" id="enrichSearchInput" class="enrich-search__input" placeholder="Search..." autocomplete="off">
+                  </div>
                 </div>
                 <div class="enrich-bar__right">
+                  <div class="enrich-filter" id="enrichFilterWrap">
+                    <span class="enrich-filter__label">Filter</span>
+                    <div class="enrich-filter-dd" id="enrichFilterDd">
+                      <button type="button" class="enrich-filter-dd__btn" id="enrichFilterBtn" aria-haspopup="menu" aria-expanded="false">
+                        <span class="enrich-filter-dd__value" id="enrichFilterLabel">All</span>
+                        <svg class="enrich-filter-dd__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                      </button>
+                      <div class="enrich-filter-dd__menu" id="enrichFilterMenu" role="menu" hidden>
+                        <button type="button" class="enrich-filter-dd__item" role="menuitem" data-filter="all">All</button>
+                        <button type="button" class="enrich-filter-dd__item" role="menuitem" data-filter="enriched">Enriched</button>
+                        <button type="button" class="enrich-filter-dd__item" role="menuitem" data-filter="not_enriched">Not enriched</button>
+                      </div>
+                    </div>
+                  </div>
                   <span class="enrich-stats" id="enrichStats"></span>
                   <button type="button" id="btnEnrichSelected" class="btn btn--enrich" disabled>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -258,7 +279,7 @@
                 <table class="ctable" aria-label="Contacts table">
                   <colgroup>
                     <col style="width:  40px">
-                    <col style="width: 48px">
+                    <col style="width: 64px">
                     <col style="width: 13%">
                     <col style="width: 13%">
                     <col style="width: 14%">

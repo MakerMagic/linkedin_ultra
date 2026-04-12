@@ -361,7 +361,7 @@
   function calcEtaSeconds(collected, total) {
     if (!total || total <= 0 || collected >= total) return null;
     const remaining = total - collected;
-    return Math.round(Math.ceil(remaining / 10) * SCROLL_TIME_PER_10 + remaining * SECONDS_PER_PROFILE);
+    return Math.round(Math.ceil(remaining / 10) * SCROLL_TIME_PER_10);
   }
 
   // =====================================================================

@@ -170,6 +170,7 @@
       chrome.storage.local.get(['crm_contacts'], function (data) {
         tableContacts    = data.crm_contacts || [];
         tableCurrentPage = 1;
+        applyFilterMode('all');
         renderDataTable();
       });
     }
@@ -423,11 +424,11 @@
   }
 
   // ── Data table renderer ────────────────────────────────────────────────
-  function renderDataTable() {
+  function renderDataTableWithSelection() {
     if (!ctableBody) return;
 
-    var contacts   = tableContacts;
-    var total      = contacts.length;
+    var filteredIdx = getFilteredIndices();
+    var total      = filteredIdx.length;
     var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
     // Clamp page
@@ -436,19 +437,21 @@
 
     var start = (tableCurrentPage - 1) * PAGE_SIZE;
     var end   = Math.min(start + PAGE_SIZE, total);
-    var slice = contacts.slice(start, end);
+    var pageIdx = filteredIdx.slice(start, end);
+    var slice = pageIdx.map(function (absIndex) { return tableContacts[absIndex]; });
 
     // Update header count
     if (dataCardCount) {
-      dataCardCount.textContent = total > 0
-        ? total.toLocaleString() + ' contact' + (total === 1 ? '' : 's')
+      var overall = tableContacts.length;
+      dataCardCount.textContent = overall > 0
+        ? overall.toLocaleString() + ' contact' + (overall === 1 ? '' : 's')
         : '';
     }
 
     // ── Empty state ──
     if (slice.length === 0) {
       ctableBody.innerHTML =
-        '<tr><td colspan="5">' +
+        '<tr><td colspan="9">' +
           '<div class="table-empty">' +
             '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
               '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>' +
@@ -481,7 +484,6 @@
           '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + name + '">' +
             '<span>' + (name || '—') + '</span>' +
             '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
-              '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>' +
               '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
             '</svg>' +
           '</a>';
@@ -575,7 +577,7 @@
     paginationEl.querySelectorAll('[data-page]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         tableCurrentPage = parseInt(btn.getAttribute('data-page'), 10);
-        renderDataTable();
+        renderDataTableWithSelection();
         // Scroll table into view gently
         var card = document.querySelector('#leads-panel-data .data-card');
         if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -586,11 +588,11 @@
     var nextBtn = paginationEl.querySelector('#pageNext');
     if (prevBtn) prevBtn.addEventListener('click', function () {
       tableCurrentPage--;
-      renderDataTable();
+      renderDataTableWithSelection();
     });
     if (nextBtn) nextBtn.addEventListener('click', function () {
       tableCurrentPage++;
-      renderDataTable();
+      renderDataTableWithSelection();
     });
   }
 
@@ -649,150 +651,135 @@
   // ENRICH LEADS MODULE (Data Tab)
   // ═══════════════════════════════════════════════════════════════════════
 
+  var enrichBar          = document.getElementById('enrichBar');
   var enrichSelectAll    = document.getElementById('enrichSelectAll');
   var enrichRangeFrom    = document.getElementById('enrichRangeFrom');
   var enrichRangeTo      = document.getElementById('enrichRangeTo');
   var btnEnrichRange     = document.getElementById('btnEnrichRange');
   var btnEnrichSelected  = document.getElementById('btnEnrichSelected');
   var btnEnrichStop      = document.getElementById('btnEnrichStop');
+  var enrichFilterBtn    = document.getElementById('enrichFilterBtn');
+  var enrichFilterMenu   = document.getElementById('enrichFilterMenu');
+  var enrichFilterLabel  = document.getElementById('enrichFilterLabel');
   var enrichProgress     = document.getElementById('enrichProgress');
   var enrichStatus       = document.getElementById('enrichStatus');
   var enrichCount        = document.getElementById('enrichCount');
   var enrichFill         = document.getElementById('enrichFill');
   var enrichStats        = document.getElementById('enrichStats');
   var btnClearAllData    = document.getElementById('btnClearAllData');
+  var enrichSearchInput  = document.getElementById('enrichSearchInput');
 
-  var selectedRows       = new Set(); // Set of absolute indices (0-based)
+  var selectedRows       = new Set();
   var isEnrichRunning    = false;
+  var enrichFilterMode   = 'all';
+  var searchKeyword      = '';
 
-  // ── Render table with checkboxes ──────────────────────────────────────
-  function renderDataTableWithSelection() {
-    if (!ctableBody) return;
+  function isContactEnriched(c) {
+    if (!c) return false;
+    return !!(
+      (c.jobTitle && String(c.jobTitle).trim()) ||
+      (c.company  && String(c.company).trim())  ||
+      (c.school   && String(c.school).trim())   ||
+      (c.major    && String(c.major).trim())
+    );
+  }
 
-    var contacts   = tableContacts;
-    var total      = contacts.length;
-    var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  function getFilterMode() {
+    return enrichFilterMode || 'all';
+  }
 
-    if (tableCurrentPage > totalPages) tableCurrentPage = totalPages;
-    if (tableCurrentPage < 1)          tableCurrentPage = 1;
+  function filterLabelForMode(mode) {
+    if (mode === 'enriched') return 'Enriched';
+    if (mode === 'not_enriched') return 'Not enriched';
+    return 'All';
+  }
 
-    var start = (tableCurrentPage - 1) * PAGE_SIZE;
-    var end   = Math.min(start + PAGE_SIZE, total);
-    var slice = contacts.slice(start, end);
+  function contactMatchesSearch(c, keyword) {
+    if (!keyword) return true;
+    var k = keyword.toLowerCase();
+    return (
+      (c.firstName && String(c.firstName).toLowerCase().includes(k)) ||
+      (c.lastName  && String(c.lastName).toLowerCase().includes(k)) ||
+      (c.jobTitle  && String(c.jobTitle).toLowerCase().includes(k)) ||
+      (c.company   && String(c.company).toLowerCase().includes(k)) ||
+      (c.school    && String(c.school).toLowerCase().includes(k)) ||
+      (c.major     && String(c.major).toLowerCase().includes(k))
+    );
+  }
 
-    if (dataCardCount) {
-      dataCardCount.textContent = total > 0
-        ? total.toLocaleString() + ' contact' + (total === 1 ? '' : 's')
-        : '';
+  function getFilteredIndices() {
+    var mode = getFilterMode();
+    var out = [];
+    for (var i = 0; i < tableContacts.length; i++) {
+      var c = tableContacts[i];
+      var enriched = isContactEnriched(c);
+      if (mode === 'enriched' && !enriched) continue;
+      if (mode === 'not_enriched' && enriched) continue;
+      if (!contactMatchesSearch(c, searchKeyword)) continue;
+      out.push(i);
     }
+    return out;
+  }
 
-    if (slice.length === 0) {
-      ctableBody.innerHTML =
-        '<tr><td colspan="9">' +
-          '<div class="table-empty">' +
-            '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
-              '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>' +
-              '<circle cx="9" cy="7" r="4"/>' +
-              '<path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' +
-              '<path d="M16 3.13a4 4 0 0 1 0 7.75"/>' +
-            '</svg>' +
-            '<div>' +
-              '<p class="table-empty__title">No contacts yet</p>' +
-              '<p class="table-empty__sub">Go to the Sync tab and start a sync to collect contacts.</p>' +
-            '</div>' +
-          '</div>' +
-        '</td></tr>';
-      if (tableFooter) tableFooter.hidden = true;
-      updateEnrichStats();
-      return;
-    }
-
-    var rows = slice.map(function (c, i) {
-      var absIndex   = start + i;
-      var rowNum     = absIndex + 1;
-      var isSelected = selectedRows.has(absIndex);
-      var firstName  = esc(c.firstName || '');
-      var lastName   = esc(c.lastName  || '');
-      var fullName   = esc(c.fullName  || '');
-      var url        = c.profileUrl   || '';
-      var jobTitle   = esc(c.jobTitle  || '');
-      var company    = esc(c.company   || '');
-      var school     = esc(c.school    || '');
-      var major      = esc(c.major     || '');
-
-      // URL link cell
-      var urlCell;
-      if (url) {
-        var displayUrl = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-
-        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + '…';
-        urlCell =
-          '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
-            '<span>' + displayUrl + '</span>' +
-            '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
-              '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
-            '</svg>' +
-          '</a>';
-      } else {
-        urlCell = '<span class="ctable__dash">—</span>';
-      }
-
-      var checkboxCell =
-        '<td class="ctable__check">' +
-          '<input type="checkbox" data-index="' + absIndex + '" ' + (isSelected ? 'checked' : '') + '>' +
-        '</td>';
-
-      var trClass = isSelected ? 'ctable__row--selected' : '';
-
-      return '<tr class="' + trClass + '">' +
-        checkboxCell +
-        '<td class="ctable__num">' + rowNum + '</td>' +
-        '<td>' + (firstName || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (lastName  || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + urlCell + '</td>' +
-        '<td>' + (jobTitle  || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (company   || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (school || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (major  || '<span class="ctable__dash">—</span>') + '</td>' +
-      '</tr>';
-    });
-
-    ctableBody.innerHTML = rows.join('');
-
-    // Bind checkboxes
-    ctableBody.querySelectorAll('input[type="checkbox"][data-index]').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        var idx = parseInt(cb.getAttribute('data-index'), 10);
-        if (cb.checked) {
-          selectedRows.add(idx);
-        } else {
-          selectedRows.delete(idx);
-        }
-        updateSelectAllState();
-        updateEnrichButton();
-        // Re-render to update row styling
-        var tr = cb.closest('tr');
-        if (tr) tr.classList.toggle('ctable__row--selected', cb.checked);
+  function applyFilterMode(mode) {
+    enrichFilterMode = mode || 'all';
+    if (enrichFilterLabel) enrichFilterLabel.textContent = filterLabelForMode(enrichFilterMode);
+    if (enrichFilterMenu) {
+      enrichFilterMenu.querySelectorAll('[data-filter]').forEach(function (el) {
+        var m = el.getAttribute('data-filter');
+        el.classList.toggle('enrich-filter-dd__item--active', m === enrichFilterMode);
       });
-    });
+    }
+    selectedRows.clear();
+    tableCurrentPage = 1;
+    renderDataTableWithSelection();
+  }
 
-    if (tableFooter) tableFooter.hidden = false;
+  function setFilterMenuOpen(open) {
+    if (!enrichFilterMenu || !enrichFilterBtn) return;
+    enrichFilterMenu.hidden = !open;
+    enrichFilterBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
 
-    if (paginationInfo) {
-      paginationInfo.textContent = start + 1 + '–' + end + ' of ' + total.toLocaleString();
+  function updateSelectAllState() {
+    if (!enrichSelectAll) return;
+    var filteredIdx = getFilteredIndices();
+    var start = (tableCurrentPage - 1) * PAGE_SIZE;
+    var end   = Math.min(start + PAGE_SIZE, filteredIdx.length);
+    var allSelected = true;
+    var anySelected = false;
+
+    for (var p = start; p < end; p++) {
+      var absIndex = filteredIdx[p];
+      if (selectedRows.has(absIndex)) anySelected = true;
+      else allSelected = false;
     }
 
-    if (paginationEl) {
-      if (totalPages <= 1) {
-        paginationEl.innerHTML = '';
-      } else {
-        renderPaginationWithEnrich(totalPages);
-      }
+    if (end <= start) {
+      enrichSelectAll.checked = false;
+      enrichSelectAll.indeterminate = false;
+    } else if (allSelected) {
+      enrichSelectAll.checked = true;
+      enrichSelectAll.indeterminate = false;
+    } else if (anySelected) {
+      enrichSelectAll.checked = false;
+      enrichSelectAll.indeterminate = true;
+    } else {
+      enrichSelectAll.checked = false;
+      enrichSelectAll.indeterminate = false;
     }
+  }
 
-    updateSelectAllState();
-    updateEnrichStats();
-    updateEnrichButton();
+  function updateEnrichStats() {
+    if (!enrichStats) return;
+    var count = selectedRows.size;
+    var filteredCount = getFilteredIndices().length;
+    enrichStats.textContent = (count > 0 ? ('Selected: ' + count + ' · ') : '') + 'Showing: ' + filteredCount;
+  }
+
+  function updateEnrichButton() {
+    if (!btnEnrichSelected) return;
+    btnEnrichSelected.disabled = selectedRows.size === 0 || isEnrichRunning;
   }
 
   function renderPaginationWithEnrich(totalPages) {
@@ -807,6 +794,7 @@
           '<polyline points="15 18 9 12 15 6"/>' +
         '</svg>' +
       '</button>';
+
 
     getPageRange(cur, totalPages).forEach(function (p) {
       if (p === '…') {
@@ -827,7 +815,9 @@
         '</svg>' +
       '</button>';
 
+
     paginationEl.innerHTML = html;
+
 
     paginationEl.querySelectorAll('[data-page]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -850,97 +840,210 @@
     });
   }
 
-  // ── Select All handling ───────────────────────────────────────────────
-  function updateSelectAllState() {
-    if (!enrichSelectAll) return;
+  function renderDataTableWithSelection() {
+    if (!ctableBody) return;
+
+
+    var filteredIdx = getFilteredIndices();
+    var total      = filteredIdx.length;
+    var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+
+    if (tableCurrentPage > totalPages) tableCurrentPage = totalPages;
+    if (tableCurrentPage < 1)          tableCurrentPage = 1;
+
+
     var start = (tableCurrentPage - 1) * PAGE_SIZE;
-    var end   = Math.min(start + PAGE_SIZE, tableContacts.length);
-    var allSelected = true;
-    var anySelected = false;
+    var end   = Math.min(start + PAGE_SIZE, total);
+    var pageIdx = filteredIdx.slice(start, end);
+    var slice = pageIdx.map(function (absIndex) { return tableContacts[absIndex]; });
 
-    for (var i = start; i < end; i++) {
-      if (selectedRows.has(i)) {
-        anySelected = true;
+
+    if (dataCardCount) {
+      var overall = tableContacts.length;
+      dataCardCount.textContent = overall > 0
+        ? overall.toLocaleString() + ' contact' + (overall === 1 ? '' : 's')
+        : '';
+    }
+
+
+    if (slice.length === 0) {
+      ctableBody.innerHTML =
+        '<tr><td colspan="9">' +
+          '<div class="table-empty">' +
+            '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+              '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>' +
+              '<circle cx="9" cy="7" r="4"/>' +
+              '<path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' +
+              '<path d="M16 3.13a4 4 0 0 1 0 7.75"/>' +
+            '</svg>' +
+            '<div>' +
+              '<p class="table-empty__title">No contacts yet</p>' +
+              '<p class="table-empty__sub">Go to the Sync tab and start a sync to collect contacts.</p>' +
+            '</div>' +
+          '</div>' +
+        '</td></tr>';
+      if (tableFooter) tableFooter.hidden = true;
+      updateEnrichStats();
+      updateEnrichButton();
+      updateSelectAllState();
+      return;
+    }
+
+
+    var rows = slice.map(function (c, i) {
+      var absIndex   = pageIdx[i];
+      var rowNum     = start + i + 1;
+      var isSelected = selectedRows.has(absIndex);
+      var firstName  = esc(c.firstName || '');
+      var lastName   = esc(c.lastName  || '');
+      var url        = c.profileUrl   || '';
+      var jobTitle   = esc(c.jobTitle  || '');
+      var company    = esc(c.company   || '');
+      var school     = esc(c.school    || '');
+      var major      = esc(c.major     || '');
+
+
+      var urlCell;
+      if (url) {
+        var displayUrl = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + '…';
+        urlCell =
+          '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
+            '<span>' + displayUrl + '</span>' +
+            '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
+              '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
+            '</svg>' +
+          '</a>';
       } else {
-        allSelected = false;
+        urlCell = '<span class="ctable__dash">—</span>';
       }
+
+
+      var checkboxCell =
+        '<td class="ctable__check">' +
+          '<input type="checkbox" data-index="' + absIndex + '" ' + (isSelected ? 'checked' : '') + '>' +
+        '</td>';
+
+
+      var trClass = isSelected ? 'ctable__row--selected' : '';
+
+
+      return '<tr class="' + trClass + '">' +
+        checkboxCell +
+        '<td class="ctable__num">' + rowNum + '</td>' +
+        '<td>' + (firstName || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (lastName  || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + urlCell + '</td>' +
+        '<td>' + (jobTitle  || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (company   || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (school    || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (major     || '<span class="ctable__dash">—</span>') + '</td>' +
+      '</tr>';
+    });
+
+
+    ctableBody.innerHTML = rows.join('');
+
+
+    ctableBody.querySelectorAll('input[type="checkbox"][data-index]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var idx = parseInt(cb.getAttribute('data-index'), 10);
+        if (cb.checked) selectedRows.add(idx);
+        else selectedRows.delete(idx);
+        updateSelectAllState();
+        updateEnrichStats();
+        updateEnrichButton();
+        var tr = cb.closest('tr');
+        if (tr) tr.classList.toggle('ctable__row--selected', cb.checked);
+      });
+    });
+
+
+    if (tableFooter) tableFooter.hidden = false;
+    if (paginationInfo) {
+      if (total === 0) paginationInfo.textContent = '0 of 0';
+      else paginationInfo.textContent = (start + 1) + '–' + end + ' of ' + total.toLocaleString();
     }
 
-    if (end <= start) {
-      enrichSelectAll.checked = false;
-      enrichSelectAll.indeterminate = false;
-    } else if (allSelected) {
-      enrichSelectAll.checked = true;
-      enrichSelectAll.indeterminate = false;
-    } else if (anySelected) {
-      enrichSelectAll.checked = false;
-      enrichSelectAll.indeterminate = true;
-    } else {
-      enrichSelectAll.checked = false;
-      enrichSelectAll.indeterminate = false;
+
+    if (paginationEl) {
+      if (totalPages <= 1) paginationEl.innerHTML = '';
+      else renderPaginationWithEnrich(totalPages);
     }
+
+
+    updateSelectAllState();
+    updateEnrichStats();
+    updateEnrichButton();
   }
+
 
   if (enrichSelectAll) {
     enrichSelectAll.addEventListener('change', function () {
+      var filteredIdx = getFilteredIndices();
       var start = (tableCurrentPage - 1) * PAGE_SIZE;
-      var end   = Math.min(start + PAGE_SIZE, tableContacts.length);
+      var end   = Math.min(start + PAGE_SIZE, filteredIdx.length);
+
 
       if (enrichSelectAll.checked) {
-        for (var i = start; i < end; i++) {
-          selectedRows.add(i);
-        }
+        for (var p = start; p < end; p++) selectedRows.add(filteredIdx[p]);
       } else {
-        for (var i = start; i < end; i++) {
-          selectedRows.delete(i);
-        }
+        for (var p = start; p < end; p++) selectedRows.delete(filteredIdx[p]);
       }
+
+
       renderDataTableWithSelection();
-      updateEnrichButton();
     });
   }
 
-  // ── Range selection ───────────────────────────────────────────────────
+
   if (btnEnrichRange) {
     btnEnrichRange.addEventListener('click', function () {
       var fromVal = parseInt(enrichRangeFrom?.value, 10);
       var toVal   = parseInt(enrichRangeTo?.value, 10);
-
       if (isNaN(fromVal) || isNaN(toVal)) return;
+      var filteredIdx = getFilteredIndices();
+      if (filteredIdx.length === 0) return;
 
-      var from = Math.max(1, Math.min(fromVal, tableContacts.length));
-      var to   = Math.max(from, Math.min(toVal, tableContacts.length));
 
-      for (var i = from - 1; i < to; i++) {
-        selectedRows.add(i);
-      }
+      var from = Math.max(1, Math.min(fromVal, filteredIdx.length));
+      var to   = Math.max(from, Math.min(toVal, filteredIdx.length));
+      for (var i = from - 1; i < to; i++) selectedRows.add(filteredIdx[i]);
+
 
       renderDataTableWithSelection();
-
-      // Clear inputs
       if (enrichRangeFrom) enrichRangeFrom.value = '';
       if (enrichRangeTo)   enrichRangeTo.value   = '';
     });
   }
 
-  // ── Stats and Button state ────────────────────────────────────────────
-  function updateEnrichStats() {
-    if (!enrichStats) return;
-    var count = selectedRows.size;
-    enrichStats.textContent = count > 0 ? 'Selected: ' + count : '';
+
+  function updateEnrichProgress(current, total, status) {
+    if (enrichCount)  enrichCount.textContent = current + ' / ' + total;
+    if (enrichStatus) enrichStatus.textContent = status || ('Processing ' + current + ' of ' + total);
+    if (enrichFill)   enrichFill.style.width = total > 0 ? (current / total * 100) + '%' : '0%';
   }
 
-  function updateEnrichButton() {
-    if (!btnEnrichSelected) return;
-    btnEnrichSelected.disabled = selectedRows.size === 0 || isEnrichRunning;
+
+  async function saveContactsToStorage() {
+    return new Promise(function (resolve) {
+      chrome.storage.local.set({ crm_contacts: tableContacts }, resolve);
+    });
   }
 
-  // ── Enrich Flow ─────────────────────────────────────────────────────────
+
+  function stopEnrich() {
+    if (!isEnrichRunning) return;
+    isEnrichRunning = false;
+  }
+
+
   async function startEnrich() {
     if (isEnrichRunning) return;
     if (selectedRows.size === 0) return;
 
-    // Check if sync is running
+
     var snap = await new Promise(function (resolve) {
       chrome.storage.local.get(['crm_sync_status'], resolve);
     });
@@ -949,33 +1052,31 @@
       return;
     }
 
+
     isEnrichRunning = true;
     updateEnrichButton();
-
-    // Show progress UI
     if (enrichProgress) enrichProgress.hidden = false;
     if (btnEnrichStop)  btnEnrichStop.hidden  = false;
     if (enrichBar)      enrichBar.style.opacity = '0.6';
 
-    // Get selected contacts
+
     var indices = Array.from(selectedRows).sort(function (a, b) { return a - b; });
     var toEnrich = indices.map(function (idx) { return tableContacts[idx]; });
 
-    // Clear selection
+
     selectedRows.clear();
     renderDataTableWithSelection();
 
-    // Process one by one through background script
-    var processed = 0;
-    var total     = toEnrich.length;
-    var enriched  = [];
 
+    var processed = 0;
+    var total = toEnrich.length;
     updateEnrichProgress(0, total, 'Starting...');
 
-    for (var i = 0; i < toEnrich.length; i++) {
-      var contact = toEnrich[i];
 
+    for (var i = 0; i < toEnrich.length && isEnrichRunning; i++) {
+      var contact = toEnrich[i];
       updateEnrichProgress(i, total, 'Opening: ' + (contact.fullName || 'Profile'));
+
 
       try {
         var result = await new Promise(function (resolve) {
@@ -984,7 +1085,6 @@
             profileUrl: contact.profileUrl
           }, function (r) {
             if (chrome.runtime.lastError) {
-              console.warn('[Enrich] Error:', chrome.runtime.lastError.message);
               resolve({ ok: false });
               return;
             }
@@ -992,77 +1092,98 @@
           });
         });
 
+
         if (result.ok && result.data) {
-          // Merge enriched data
-          contact.jobTitle = result.data.jobTitle || contact.jobTitle || '';
-          contact.company  = result.data.company  || contact.company  || '';
-          contact.school   = result.data.school   || contact.school   || '';
-          contact.major    = result.data.major    || contact.major    || '';
+          var NF = 'Not Found';
+          contact.jobTitle = (result.data.jobTitle && String(result.data.jobTitle).trim())
+            ? result.data.jobTitle
+            : (contact.jobTitle && String(contact.jobTitle).trim()) ? contact.jobTitle : NF;
+          contact.company  = (result.data.company && String(result.data.company).trim())
+            ? result.data.company
+            : (contact.company && String(contact.company).trim()) ? contact.company : NF;
+          contact.school   = (result.data.school && String(result.data.school).trim())
+            ? result.data.school
+            : (contact.school && String(contact.school).trim()) ? contact.school : NF;
+          contact.major    = (result.data.major && String(result.data.major).trim())
+            ? result.data.major
+            : (contact.major && String(contact.major).trim()) ? contact.major : NF;
         }
 
-        enriched.push(contact);
+
         processed++;
-
         updateEnrichProgress(processed, total, 'Processed: ' + processed + ' of ' + total);
-
-        // Save to storage after each contact
         await saveContactsToStorage();
-
-        // Refresh table to show updated data
         renderDataTableWithSelection();
-
       } catch (err) {
         console.error('[Enrich] Error processing contact:', err);
-        enriched.push(contact);
       }
 
-      // Pause between contacts (except after last)
+
       if (i < toEnrich.length - 1) {
         await new Promise(function (r) { setTimeout(r, 700 + Math.random() * 300); });
       }
     }
 
-    // Complete
+
     isEnrichRunning = false;
     if (enrichProgress) enrichProgress.hidden = true;
     if (btnEnrichStop)  btnEnrichStop.hidden  = true;
     if (enrichBar)      enrichBar.style.opacity = '1';
-
     updateEnrichButton();
     renderDataTableWithSelection();
-
-    console.log('[Enrich] Complete. Processed:', processed, 'of', total);
   }
 
-  function updateEnrichProgress(current, total, status) {
-    if (enrichCount)  enrichCount.textContent = current + ' / ' + total;
-    if (enrichStatus) enrichStatus.textContent = status || ('Processing ' + current + ' of ' + total);
-    if (enrichFill)   enrichFill.style.width = total > 0 ? (current / total * 100) + '%' : '0%';
-  }
 
-  async function saveContactsToStorage() {
-    return new Promise(function (resolve) {
-      chrome.storage.local.set({ crm_contacts: tableContacts }, resolve);
+  if (btnEnrichSelected) btnEnrichSelected.addEventListener('click', startEnrich);
+  if (btnEnrichStop)     btnEnrichStop.addEventListener('click', stopEnrich);
+
+
+  if (enrichFilterBtn && enrichFilterMenu) {
+    enrichFilterBtn.addEventListener('click', function () {
+      setFilterMenuOpen(!!enrichFilterMenu.hidden);
     });
+
+
+    enrichFilterMenu.querySelectorAll('[data-filter]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var mode = btn.getAttribute('data-filter') || 'all';
+        setFilterMenuOpen(false);
+        applyFilterMode(mode);
+      });
+    });
+
+
+    document.addEventListener('click', function (e) {
+      if (enrichFilterMenu.hidden) return;
+      var t = e.target;
+      if (enrichFilterBtn.contains(t)) return;
+      if (enrichFilterMenu.contains(t)) return;
+      setFilterMenuOpen(false);
+    });
+
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && enrichFilterMenu && !enrichFilterMenu.hidden) {
+        setFilterMenuOpen(false);
+      }
+    });
+
+    if (enrichSearchInput) {
+      enrichSearchInput.addEventListener('input', function () {
+        searchKeyword = enrichSearchInput.value.trim();
+        tableCurrentPage = 1;
+        selectedRows.clear();
+        renderDataTableWithSelection();
+      });
+    }
   }
 
-  function stopEnrich() {
-    if (!isEnrichRunning) return;
-    console.log('[Enrich] Stop requested');
-    isEnrichRunning = false;
-    // Current iteration will complete, then loop will exit
-  }
 
-  if (btnEnrichSelected) {
-    btnEnrichSelected.addEventListener('click', startEnrich);
-  }
+  applyFilterMode('all');
 
-  if (btnEnrichStop) {
-    btnEnrichStop.addEventListener('click', stopEnrich);
-  }
 
   if (btnClearAllData) {
-    btnClearAllData.addEventListener('click', function() {
+    btnClearAllData.addEventListener('click', function () {
       if (confirm('Clear all contacts? This cannot be undone.')) {
         chrome.storage.local.set({
           crm_contacts: [],
@@ -1073,7 +1194,7 @@
           crm_sync_status: 'idle',
           crm_sync_phase: 'idle',
           crm_sync_command: null
-        }, function() {
+        }, function () {
           tableContacts = [];
           selectedRows.clear();
           renderDataTableWithSelection();
@@ -1084,7 +1205,8 @@
     });
   }
 
-  // Override original renderDataTable with our version
+
   renderDataTable = renderDataTableWithSelection;
+
 
 })();
