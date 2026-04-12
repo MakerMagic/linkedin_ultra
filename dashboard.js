@@ -20,7 +20,7 @@
 
   const CIRCUMFERENCE      = 2 * Math.PI * 52;
   const HEARTBEAT_STALE_MS = 15000;
-  const PAGE_SIZE          = 30;
+  const PAGE_SIZE          = 15;
 
   // ── DOM refs ──────────────────────────────────────────────────────────
   var arc        = document.getElementById('progressArc');
@@ -669,9 +669,30 @@
   var btnClearAllData    = document.getElementById('btnClearAllData');
   var enrichSearchInput  = document.getElementById('enrichSearchInput');
 
+  var contactCardModal   = document.getElementById('contactCardModal');
+  var contactCardOverlay = document.getElementById('contactCardOverlay');
+  var contactCardClose   = document.getElementById('contactCardClose');
+  var contactCardAvatar  = document.getElementById('contactCardAvatar');
+  var contactCardName    = document.getElementById('contactCardName');
+  var contactCardConnection = document.getElementById('contactCardConnection');
+  var contactCardUrl     = document.getElementById('contactCardUrl');
+  var contactCardJobTitle = document.getElementById('contactCardJobTitle');
+  var contactCardCompany = document.getElementById('contactCardCompany');
+  var contactCardSchool  = document.getElementById('contactCardSchool');
+  var contactCardMajor   = document.getElementById('contactCardMajor');
+  var contactCardRegion  = document.getElementById('contactCardRegion');
+  var contactCardNotes   = document.getElementById('contactCardNotes');
+  var contactCardSaveNotes = document.getElementById('contactCardSaveNotes');
+
+  var clearAllConfirmModal = document.getElementById('clearAllConfirmModal');
+  var clearAllConfirmOverlay = document.getElementById('clearAllConfirmOverlay');
+  var clearAllCancel     = document.getElementById('clearAllCancel');
+  var clearAllConfirm    = document.getElementById('clearAllConfirm');
+
+  var currentContactCardIndex = null;
   var selectedRows       = new Set();
   var isEnrichRunning    = false;
-  var enrichFilterMode   = 'all';
+  var enrichFilterSet    = new Set();
   var searchKeyword      = '';
 
   function isContactEnriched(c) {
@@ -684,14 +705,29 @@
     );
   }
 
-  function getFilterMode() {
-    return enrichFilterMode || 'all';
+  function isContactConnected(c) {
+    if (!c) return false;
+    return c.connected === true || c.connected === 'YES' || c.connected === 'yes';
   }
 
-  function filterLabelForMode(mode) {
-    if (mode === 'enriched') return 'Enriched';
-    if (mode === 'not_enriched') return 'Not enriched';
-    return 'All';
+  function getFilterLabel() {
+    if (enrichFilterSet.size === 0) return 'All';
+    if (enrichFilterSet.size === 1) {
+      var m = Array.from(enrichFilterSet)[0];
+      if (m === 'enriched') return 'Enriched';
+      if (m === 'not_enriched') return 'Not enriched';
+      if (m === 'connected') return 'Connected';
+      if (m === 'not_connected') return 'Not connected';
+    }
+    return enrichFilterSet.size + ' filters';
+  }
+
+  function updateFilterButtons() {
+    if (!enrichFilterMenu) return;
+    enrichFilterMenu.querySelectorAll('.enrich-filter-dd__item').forEach(function (btn) {
+      var filter = btn.getAttribute('data-filter');
+      btn.classList.toggle('enrich-filter-dd__item--active', enrichFilterSet.has(filter));
+    });
   }
 
   function contactMatchesSearch(c, keyword) {
@@ -708,31 +744,37 @@
   }
 
   function getFilteredIndices() {
-    var mode = getFilterMode();
     var out = [];
     for (var i = 0; i < tableContacts.length; i++) {
       var c = tableContacts[i];
       var enriched = isContactEnriched(c);
-      if (mode === 'enriched' && !enriched) continue;
-      if (mode === 'not_enriched' && enriched) continue;
+      var connected = isContactConnected(c);
+
+      var hasEnrichedFilter = enrichFilterSet.has('enriched') || enrichFilterSet.has('not_enriched');
+      var hasConnectedFilter = enrichFilterSet.has('connected') || enrichFilterSet.has('not_connected');
+
+      if (enrichFilterSet.has('enriched') && !enriched) continue;
+      if (enrichFilterSet.has('not_enriched') && enriched) continue;
+      if (enrichFilterSet.has('connected') && !connected) continue;
+      if (enrichFilterSet.has('not_connected') && connected) continue;
+
       if (!contactMatchesSearch(c, searchKeyword)) continue;
       out.push(i);
     }
     return out;
   }
 
-  function applyFilterMode(mode) {
-    enrichFilterMode = mode || 'all';
-    if (enrichFilterLabel) enrichFilterLabel.textContent = filterLabelForMode(enrichFilterMode);
-    if (enrichFilterMenu) {
-      enrichFilterMenu.querySelectorAll('[data-filter]').forEach(function (el) {
-        var m = el.getAttribute('data-filter');
-        el.classList.toggle('enrich-filter-dd__item--active', m === enrichFilterMode);
-      });
-    }
+  function applyFilters() {
+    if (enrichFilterLabel) enrichFilterLabel.textContent = getFilterLabel();
     selectedRows.clear();
     tableCurrentPage = 1;
     renderDataTableWithSelection();
+  }
+
+  function clearAllFilters() {
+    enrichFilterSet.clear();
+    updateFilterButtons();
+    applyFilters();
   }
 
   function setFilterMenuOpen(open) {
@@ -928,12 +970,18 @@
 
       var trClass = isSelected ? 'ctable__row--selected' : '';
 
+      var firstNameCell = firstName
+        ? '<span class="ctable__name" data-index="' + absIndex + '">' + firstName + '</span>'
+        : '<span class="ctable__dash">—</span>';
+      var lastNameCell = lastName
+        ? '<span class="ctable__name" data-index="' + absIndex + '">' + lastName + '</span>'
+        : '<span class="ctable__dash">—</span>';
 
       return '<tr class="' + trClass + '">' +
         checkboxCell +
         '<td class="ctable__num">' + rowNum + '</td>' +
-        '<td>' + (firstName || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (lastName  || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + firstNameCell + '</td>' +
+        '<td>' + lastNameCell + '</td>' +
         '<td>' + urlCell + '</td>' +
         '<td>' + (jobTitle  || '<span class="ctable__dash">—</span>') + '</td>' +
         '<td>' + (company   || '<span class="ctable__dash">—</span>') + '</td>' +
@@ -959,6 +1007,13 @@
       });
     });
 
+    ctableBody.querySelectorAll('.ctable__name').forEach(function (nameEl) {
+      nameEl.addEventListener('click', function () {
+        var idx = parseInt(nameEl.getAttribute('data-index'), 10);
+        openContactCard(idx);
+      });
+    });
+
 
     if (tableFooter) tableFooter.hidden = false;
     if (paginationInfo) {
@@ -977,6 +1032,73 @@
     updateEnrichStats();
     updateEnrichButton();
   }
+
+  function openContactCard(index) {
+    if (!tableContacts[index]) return;
+    currentContactCardIndex = index;
+    var c = tableContacts[index];
+
+    var firstName = c.firstName || '';
+    var lastName = c.lastName || '';
+    var fullName = (firstName + ' ' + lastName).trim() || 'Unknown';
+    var initials = (firstName[0] || '') + (lastName[0] || '');
+
+    if (contactCardAvatar) {
+      contactCardAvatar.textContent = initials.toUpperCase();
+    }
+    if (contactCardName) {
+      contactCardName.textContent = fullName;
+    }
+
+    if (contactCardConnection) {
+      var isConnected = c.connected === true || c.connected === 'YES' || c.connected === 'yes';
+      contactCardConnection.textContent = 'Connected: ' + (isConnected ? 'YES' : 'NO');
+      contactCardConnection.className = 'contact-card__connection ' + (isConnected ? 'contact-card__connection--yes' : 'contact-card__connection--no');
+    }
+
+    if (contactCardUrl) {
+      contactCardUrl.href = c.profileUrl || '#';
+      contactCardUrl.textContent = c.profileUrl || '—';
+    }
+
+    if (contactCardJobTitle) {
+      contactCardJobTitle.textContent = c.jobTitle || '';
+    }
+    if (contactCardCompany) {
+      contactCardCompany.textContent = c.company || '';
+    }
+    if (contactCardSchool) {
+      contactCardSchool.textContent = c.school || '';
+    }
+    if (contactCardMajor) {
+      contactCardMajor.textContent = c.major || '';
+    }
+    if (contactCardRegion) {
+      contactCardRegion.textContent = c.region || '—';
+    }
+    if (contactCardNotes) {
+      contactCardNotes.value = c.notes || '';
+    }
+
+    if (contactCardModal) {
+      contactCardModal.hidden = false;
+    }
+  }
+
+  if (contactCardClose) {
+    contactCardClose.addEventListener('click', closeContactCard);
+  }
+  if (contactCardOverlay) {
+    contactCardOverlay.addEventListener('click', closeContactCard);
+  }
+  if (contactCardSaveNotes) {
+    contactCardSaveNotes.addEventListener('click', saveContactNotes);
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && contactCardModal && !contactCardModal.hidden) {
+      closeContactCard();
+    }
+  });
 
 
   if (enrichSelectAll) {
@@ -1026,23 +1148,14 @@
   }
 
 
-  async function saveContactsToStorage() {
-    return new Promise(function (resolve) {
-      chrome.storage.local.set({ crm_contacts: tableContacts }, resolve);
-    });
-  }
-
-
   function stopEnrich() {
     if (!isEnrichRunning) return;
     isEnrichRunning = false;
   }
 
-
   async function startEnrich() {
     if (isEnrichRunning) return;
     if (selectedRows.size === 0) return;
-
 
     var snap = await new Promise(function (resolve) {
       chrome.storage.local.get(['crm_sync_status'], resolve);
@@ -1140,17 +1253,31 @@
 
   if (enrichFilterBtn && enrichFilterMenu) {
     enrichFilterBtn.addEventListener('click', function () {
-      setFilterMenuOpen(!!enrichFilterMenu.hidden);
+      var isHidden = enrichFilterMenu.hidden;
+      setFilterMenuOpen(isHidden);
     });
 
 
-    enrichFilterMenu.querySelectorAll('[data-filter]').forEach(function (btn) {
+    enrichFilterMenu.querySelectorAll('.enrich-filter-dd__item').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var mode = btn.getAttribute('data-filter') || 'all';
-        setFilterMenuOpen(false);
-        applyFilterMode(mode);
+        var value = btn.getAttribute('data-filter');
+        if (enrichFilterSet.has(value)) {
+          enrichFilterSet.delete(value);
+        } else {
+          enrichFilterSet.add(value);
+        }
+        updateFilterButtons();
+        applyFilters();
       });
     });
+
+
+    var enrichFilterClear = document.getElementById('enrichFilterClear');
+    if (enrichFilterClear) {
+      enrichFilterClear.addEventListener('click', function () {
+        clearAllFilters();
+      });
+    }
 
 
     document.addEventListener('click', function (e) {
@@ -1179,31 +1306,84 @@
   }
 
 
-  applyFilterMode('all');
+  applyFilters();
 
 
-  if (btnClearAllData) {
-    btnClearAllData.addEventListener('click', function () {
-      if (confirm('Clear all contacts? This cannot be undone.')) {
-        chrome.storage.local.set({
-          crm_contacts: [],
-          crm_sync_count: 0,
-          crm_sync_total: null,
-          crm_sync_percent: 0,
-          crm_sync_label: '0',
-          crm_sync_status: 'idle',
-          crm_sync_phase: 'idle',
-          crm_sync_command: null
-        }, function () {
-          tableContacts = [];
-          selectedRows.clear();
-          renderDataTableWithSelection();
-          updateDataBadge();
-          alert('All data cleared.');
-        });
-      }
+  function closeContactCard() {
+    if (contactCardModal) {
+      contactCardModal.hidden = true;
+    }
+  }
+
+  function saveContactNotes() {
+    if (currentContactCardIndex === null || !contactCardNotes) return;
+    var c = tableContacts[currentContactCardIndex];
+    if (!c) return;
+    c.notes = contactCardNotes.value.trim();
+    saveContactsToStorage();
+    if (contactCardSaveNotes) {
+      var originalText = contactCardSaveNotes.textContent;
+      contactCardSaveNotes.classList.add('contact-card__save-btn--saved');
+      contactCardSaveNotes.innerHTML = 'Saved!<span class="contact-card__save-check"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
+      setTimeout(function () {
+        contactCardSaveNotes.classList.remove('contact-card__save-btn--saved');
+        contactCardSaveNotes.textContent = originalText;
+      }, 2000);
+    }
+  }
+
+  function showClearAllConfirmModal() {
+    if (clearAllConfirmModal) {
+      clearAllConfirmModal.hidden = false;
+    }
+  }
+
+  function hideClearAllConfirmModal() {
+    if (clearAllConfirmModal) {
+      clearAllConfirmModal.hidden = true;
+    }
+  }
+
+  function executeClearAllData() {
+    chrome.storage.local.set({
+      crm_contacts: [],
+      crm_sync_count: 0,
+      crm_sync_total: null,
+      crm_sync_percent: 0,
+      crm_sync_label: '0',
+      crm_sync_status: 'idle',
+      crm_sync_phase: 'idle',
+      crm_sync_command: null
+    }, function () {
+      tableContacts = [];
+      selectedRows.clear();
+      renderDataTableWithSelection();
+      updateDataBadge();
+      hideClearAllConfirmModal();
     });
   }
+
+  if (btnClearAllData) {
+    btnClearAllData.addEventListener('click', showClearAllConfirmModal);
+  }
+
+  if (clearAllCancel) {
+    clearAllCancel.addEventListener('click', hideClearAllConfirmModal);
+  }
+
+  if (clearAllConfirm) {
+    clearAllConfirm.addEventListener('click', executeClearAllData);
+  }
+
+  if (clearAllConfirmOverlay) {
+    clearAllConfirmOverlay.addEventListener('click', hideClearAllConfirmModal);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && clearAllConfirmModal && !clearAllConfirmModal.hidden) {
+      hideClearAllConfirmModal();
+    }
+  });
 
 
   renderDataTable = renderDataTableWithSelection;

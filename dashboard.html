@@ -244,9 +244,11 @@
                         </svg>
                       </button>
                       <div class="enrich-filter-dd__menu" id="enrichFilterMenu" role="menu" hidden>
-                        <button type="button" class="enrich-filter-dd__item" role="menuitem" data-filter="all">All</button>
-                        <button type="button" class="enrich-filter-dd__item" role="menuitem" data-filter="enriched">Enriched</button>
-                        <button type="button" class="enrich-filter-dd__item" role="menuitem" data-filter="not_enriched">Not enriched</button>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="enriched">Enriched</button>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="not_enriched">Not enriched</button>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="connected">Connected</button>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="not_connected">Not connected</button>
+                        <button type="button" class="enrich-filter-dd__clear" id="enrichFilterClear">Clear all</button>
                       </div>
                     </div>
                   </div>
@@ -327,6 +329,78 @@
               <div class="table-footer" id="tableFooter" hidden>
                 <span class="table-footer__info" id="paginationInfo"></span>
                 <div class="pagination" id="tablePagination" role="navigation" aria-label="Table pagination"></div>
+              </div>
+
+              <!-- Clear All Confirmation Modal -->
+              <div class="confirm-modal" id="clearAllConfirmModal" hidden>
+                <div class="confirm-modal__overlay" id="clearAllConfirmOverlay"></div>
+                <div class="confirm-modal__card">
+                  <div class="confirm-modal__icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  </div>
+                  <h3 class="confirm-modal__title">Are you sure?</h3>
+                  <p class="confirm-modal__text">All data in this table will be permanently deleted. This action cannot be undone.</p>
+                  <div class="confirm-modal__actions">
+                    <button type="button" class="confirm-modal__btn confirm-modal__btn--cancel" id="clearAllCancel">Cancel</button>
+                    <button type="button" class="confirm-modal__btn confirm-modal__btn--danger" id="clearAllConfirm">Clear All Data</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Contact Card Modal -->
+              <div class="contact-card-modal" id="contactCardModal" hidden>
+                <div class="contact-card-overlay" id="contactCardOverlay"></div>
+                <div class="contact-card" id="contactCard">
+                  <button type="button" class="contact-card__close" id="contactCardClose" aria-label="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                  <div class="contact-card__header">
+                    <div class="contact-card__avatar" id="contactCardAvatar"></div>
+                    <div class="contact-card__title">
+                      <h3 class="contact-card__name" id="contactCardName"></h3>
+                      <span class="contact-card__connection" id="contactCardConnection"></span>
+                    </div>
+                  </div>
+                  <div class="contact-card__body">
+                    <div class="contact-card__section">
+                      <span class="contact-card__label">Profile URL</span>
+                      <a class="contact-card__value contact-card__link" id="contactCardUrl" target="_blank" rel="noopener noreferrer"></a>
+                    </div>
+                    <div class="contact-card__grid">
+                      <div class="contact-card__section">
+                        <span class="contact-card__label">Job Title</span>
+                        <span class="contact-card__value" id="contactCardJobTitle"></span>
+                      </div>
+                      <div class="contact-card__section">
+                        <span class="contact-card__label">Company</span>
+                        <span class="contact-card__value" id="contactCardCompany"></span>
+                      </div>
+                      <div class="contact-card__section">
+                        <span class="contact-card__label">School</span>
+                        <span class="contact-card__value" id="contactCardSchool"></span>
+                      </div>
+                      <div class="contact-card__section">
+                        <span class="contact-card__label">Major</span>
+                        <span class="contact-card__value" id="contactCardMajor"></span>
+                      </div>
+                    </div>
+                    <div class="contact-card__section">
+                      <span class="contact-card__label">Region</span>
+                      <span class="contact-card__value" id="contactCardRegion"></span>
+                    </div>
+                    <div class="contact-card__section contact-card__notes">
+                      <span class="contact-card__label">Notes</span>
+                      <textarea class="contact-card__textarea" id="contactCardNotes" placeholder="Add notes about this contact..."></textarea>
+                      <button type="button" class="contact-card__save-btn" id="contactCardSaveNotes">Save</button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </section>
           </div><!-- /leads-panel-data -->
