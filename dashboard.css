@@ -1169,6 +1169,29 @@ html,body {
   border-color: rgba(99,102,241,.35);
 }
 
+/* CSV download button — accent color */
+.btn--csv {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 10px;
+  font-weight: 600;
+  background: rgba(99,102,241,.15);
+  border: 1px solid rgba(99,102,241,.4);
+  color: var(--accent);
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.btn--csv:hover {
+  background: rgba(99,102,241,.25);
+  border-color: rgba(99,102,241,.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99,102,241,.2);
+}
+
 /* Enrich button — primary accent */
 .btn--enrich {
   color: #fff;

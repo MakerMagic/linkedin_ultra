@@ -170,8 +170,8 @@
       chrome.storage.local.get(['crm_contacts'], function (data) {
         tableContacts    = data.crm_contacts || [];
         tableCurrentPage = 1;
-        applyFilterMode('all');
-        renderDataTable();
+        clearAllFilters();
+        renderDataTableWithSelection();
       });
     }
   }
@@ -829,6 +829,7 @@
     var cur = tableCurrentPage;
     var html = '';
 
+    // Prev
     html +=
       '<button class="page-btn page-btn--arrow" id="pagePrev" aria-label="Previous page"' +
         (cur <= 1 ? ' disabled' : '') + '>' +
@@ -849,6 +850,7 @@
       }
     });
 
+    // Next
     html +=
       '<button class="page-btn page-btn--arrow" id="pageNext" aria-label="Next page"' +
         (cur >= totalPages ? ' disabled' : '') + '>' +
@@ -865,6 +867,7 @@
       btn.addEventListener('click', function () {
         tableCurrentPage = parseInt(btn.getAttribute('data-page'), 10);
         renderDataTableWithSelection();
+        // Scroll table into view gently
         var card = document.querySelector('#leads-panel-data .data-card');
         if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
@@ -1016,6 +1019,7 @@
 
 
     if (tableFooter) tableFooter.hidden = false;
+
     if (paginationInfo) {
       if (total === 0) paginationInfo.textContent = '0 of 0';
       else paginationInfo.textContent = (start + 1) + '–' + end + ' of ' + total.toLocaleString();
@@ -1388,5 +1392,63 @@
 
   renderDataTable = renderDataTableWithSelection;
 
-
+  // Table CSV download
+  var btnDownloadTableCSV = document.getElementById('btnDownloadTableCSV');
+  if (btnDownloadTableCSV) {
+    btnDownloadTableCSV.addEventListener('click', function () {
+      var filteredIdx = getFilteredIndices();
+      if (filteredIdx.length === 0) {
+        alert('No contacts to download.');
+        return;
+      }
+      var rows = filteredIdx.map(function (idx) {
+        var c = tableContacts[idx];
+        return {
+          firstName: c.firstName || '',
+          lastName: c.lastName || '',
+          profileUrl: c.profileUrl || '',
+          jobTitle: c.jobTitle || '',
+          company: c.company || '',
+          school: c.school || '',
+          major: c.major || '',
+          region: c.region || '',
+          connected: c.connected === true || c.connected === 'YES' || c.connected === 'yes' ? 'YES' : 'NO',
+          notes: c.notes || ''
+        };
+      });
+      var headers = ['First Name', 'Last Name', 'Profile URL', 'Job Title', 'Company', 'School', 'Major', 'Region', 'Connected', 'Notes'];
+      var csv = [headers.join(',')];
+      rows.forEach(function (r) {
+        var vals = [
+          r.firstName,
+          r.lastName,
+          r.profileUrl,
+          r.jobTitle,
+          r.company,
+          r.school,
+          r.major,
+          r.region,
+          r.connected,
+          r.notes
+        ].map(function (v) {
+          var s = String(v || '');
+          if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+            s = '"' + s.replace(/"/g, '""') + '"';
+          }
+          return s;
+        });
+        csv.push(vals.join(','));
+      });
+      var blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      link.href = url;
+      link.download = 'contacts_' + new Date().toISOString().slice(0, 10) + '.csv';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    });
+  }
 })();
