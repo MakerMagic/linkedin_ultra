@@ -1178,7 +1178,7 @@ html,body {
   font-size: 13px;
   border-radius: 10px;
   font-weight: 600;
-  background: rgba(15, 23, 42, 0.8);
+  background: rgba(34,197,94,.08);
   border: 1px solid rgba(34, 197, 94, 0.5);
   color: #fff;
   cursor: pointer;
