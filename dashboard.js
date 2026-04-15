@@ -252,7 +252,7 @@
         if (tableCurrentPage > Math.ceil(tableContacts.length / PAGE_SIZE)) {
           tableCurrentPage = 1;
         }
-        renderDataTable();
+        renderDataTableWithSelection();
       });
     }
   }
@@ -683,6 +683,7 @@
   var contactCardRegion  = document.getElementById('contactCardRegion');
   var contactCardNotes   = document.getElementById('contactCardNotes');
   var contactCardSaveNotes = document.getElementById('contactCardSaveNotes');
+  var contactCardSavedIndicator = document.getElementById('contactCardSavedIndicator');
 
   var clearAllConfirmModal = document.getElementById('clearAllConfirmModal');
   var clearAllConfirmOverlay = document.getElementById('clearAllConfirmOverlay');
@@ -694,6 +695,8 @@
   var isEnrichRunning    = false;
   var enrichFilterSet    = new Set();
   var searchKeyword      = '';
+  var saveNotesResetTimer = null;
+  var saveNotesHideTimer  = null;
 
   function isContactEnriched(c) {
     if (!c) return false;
@@ -1224,6 +1227,9 @@
           contact.major    = (result.data.major && String(result.data.major).trim())
             ? result.data.major
             : (contact.major && String(contact.major).trim()) ? contact.major : NF;
+          contact.region   = (result.data.location && String(result.data.location).trim())
+            ? result.data.location
+            : (contact.region && String(contact.region).trim()) ? contact.region : NF;
         }
 
 
@@ -1320,20 +1326,56 @@
   }
 
   function saveContactNotes() {
-    if (currentContactCardIndex === null || !contactCardNotes) return;
-    var c = tableContacts[currentContactCardIndex];
-    if (!c) return;
-    c.notes = contactCardNotes.value.trim();
-    saveContactsToStorage();
-    if (contactCardSaveNotes) {
-      var originalText = contactCardSaveNotes.textContent;
-      contactCardSaveNotes.classList.add('contact-card__save-btn--saved');
-      contactCardSaveNotes.innerHTML = 'Saved!<span class="contact-card__save-check"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
-      setTimeout(function () {
-        contactCardSaveNotes.classList.remove('contact-card__save-btn--saved');
-        contactCardSaveNotes.textContent = originalText;
-      }, 2000);
+    console.log('[CRM] saveContactNotes called', { currentContactCardIndex, hasContactCardNotes: !!contactCardNotes });
+    if (currentContactCardIndex === null || !contactCardNotes) {
+      console.log('[CRM] saveContactNotes early exit: no index or notes element');
+      return;
     }
+    var c = tableContacts[currentContactCardIndex];
+    if (!c) {
+      console.log('[CRM] saveContactNotes early exit: no contact at index');
+      return;
+    }
+
+    var oldNotes = String(c.notes || '').trim();
+    var newNotes = String(contactCardNotes.value || '').trim();
+    console.log('[CRM] saveContactNotes notes:', { oldNotes, newNotes, same: newNotes === oldNotes });
+    if (newNotes === oldNotes) {
+      console.log('[CRM] saveContactNotes early exit: notes not changed');
+      return;
+    }
+
+    c.notes = newNotes;
+    saveContactsToStorage();
+    console.log('[CRM] saveContactNotes saved successfully');
+
+    if (!contactCardSaveNotes) {
+      console.log('[CRM] saveContactNotes: no save button element');
+      return;
+    }
+
+    if (saveNotesResetTimer) clearTimeout(saveNotesResetTimer);
+    if (saveNotesHideTimer) clearTimeout(saveNotesHideTimer);
+
+    var originalText = contactCardSaveNotes.textContent;
+    contactCardSaveNotes.classList.add('contact-card__save-btn--saved');
+    contactCardSaveNotes.textContent = 'Saved';
+    console.log('[CRM] saveContactNotes UI updated to Saved state');
+
+    if (contactCardSavedIndicator) {
+      contactCardSavedIndicator.classList.add('contact-card__saved-indicator--show');
+    }
+
+    saveNotesHideTimer = setTimeout(function () {
+      if (contactCardSavedIndicator) {
+        contactCardSavedIndicator.classList.remove('contact-card__saved-indicator--show');
+      }
+    }, 3000);
+
+    saveNotesResetTimer = setTimeout(function () {
+      contactCardSaveNotes.classList.remove('contact-card__save-btn--saved');
+      contactCardSaveNotes.textContent = originalText;
+    }, 3000);
   }
 
   function showClearAllConfirmModal() {
@@ -1391,6 +1433,15 @@
 
 
   renderDataTable = renderDataTableWithSelection;
+
+  // ── Save contacts to storage ────────────────────────────────────────────
+  function saveContactsToStorage() {
+    return new Promise(function (resolve) {
+      chrome.storage.local.set({ crm_contacts: tableContacts }, function () {
+        resolve();
+      });
+    });
+  }
 
   // Table CSV download
   var btnDownloadTableCSV = document.getElementById('btnDownloadTableCSV');

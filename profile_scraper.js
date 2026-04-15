@@ -67,6 +67,7 @@
   function findSections() {
     let experienceSection = null;
     let educationSection  = null;
+    let topCardSection    = null;
 
     // Метод 1: componentKey (приоритет)
     for (const el of document.querySelectorAll('[componentKey],[componentkey]')) {
@@ -79,10 +80,14 @@
         educationSection = el;
         console.log('[CRM Scraper] ✅ Education (componentKey)');
       }
+      if (!topCardSection && ck.includes('pv-top-card')) {
+        topCardSection = el;
+        console.log('[CRM Scraper] ✅ TopCard (componentKey)');
+      }
     }
 
     // Метод 2: заголовок h2/h3 (fallback для русского UI)
-    if (!experienceSection || !educationSection) {
+    if (!experienceSection || !educationSection || !topCardSection) {
       for (const h of document.querySelectorAll('h2,h3,[id]')) {
         const text = (h.textContent || '').trim().toLowerCase();
         const id   = (h.id || '').toLowerCase();
@@ -105,7 +110,7 @@
       }
     }
 
-    return { experienceSection, educationSection };
+    return { experienceSection, educationSection, topCardSection };
   }
 
   // ── Проверка: иконка-ссылка ────────────────────────────────────────────
@@ -139,6 +144,99 @@
     return meaningful.length >= 2 ? meaningful[1] : meaningful[meaningful.length - 1];
   }
 
+  // ── Location extraction from TopCard ───────────────────────────────────
+
+  /**
+   * Extract location from TopCard section.
+   * Structure: TopCard → nested divs → deepest div → first <p> = location
+   * Returns empty string if not found.
+   */
+  function extractLocation(topCardSection) {
+    if (!topCardSection) return '';
+
+    try {
+      // Strategy (relative DOM inside TopCard):
+      // - find <a href*="contact-info">
+      // - location can be:
+      //   (A) in the same inline container as the link (text + link)
+      //   (B) in text nodes / elements directly before the link
+      //   (C) in previous sibling <p> elements (older layout)
+
+      const contactLink = topCardSection.querySelector('a[href*="contact-info"]');
+      if (!contactLink) return '';
+
+      const linkText = cleanText(contactLink);
+
+      // (A) Closest container text minus the link label
+      const container = contactLink.closest('p,span,div');
+      if (container) {
+        let t = cleanText(container);
+        if (t) {
+          // remove the link label (e.g., "Contact info")
+          if (linkText) t = t.split(linkText).join(' ');
+          t = t.replace(/\s+/g, ' ').trim();
+          if (t) {
+            console.log('[CRM Scraper] Location found:', t);
+            return t;
+          }
+        }
+      }
+
+      // (B) Directly preceding nodes within the link's parent
+      const parentEl = contactLink.parentElement;
+      if (parentEl) {
+        const bits = [];
+
+        // Walk previous siblings (can include Text nodes)
+        let n = contactLink.previousSibling;
+        while (n) {
+          if (n.nodeType === Node.TEXT_NODE) {
+            const s = String(n.textContent || '').replace(/\s+/g, ' ').trim();
+            if (s) bits.push(s);
+          } else if (n.nodeType === Node.ELEMENT_NODE) {
+            const el = /** @type {HTMLElement} */ (n);
+            if (!el.querySelector('a')) {
+              const s = cleanText(el);
+              if (s) bits.push(s);
+            }
+          }
+          n = n.previousSibling;
+        }
+
+        const t = bits.reverse().join(' ').replace(/\s+/g, ' ').trim();
+        if (t) {
+          console.log('[CRM Scraper] Location found:', t);
+          return t;
+        }
+      }
+
+      // (C) Previous sibling <p> elements before the contact-info <p>
+      const contactP = contactLink.closest('p');
+      if (!contactP) return '';
+
+      const candidates = [];
+      let cur = contactP.previousElementSibling;
+      while (cur) {
+        if (cur.tagName !== 'P') break;
+        if (!cur.querySelector('a')) {
+          const text = cleanText(cur);
+          if (text) candidates.push(text);
+        }
+        cur = cur.previousElementSibling;
+      }
+
+      if (!candidates.length) return '';
+
+      // We walked backwards from the link; the farthest is the last collected.
+      const location = candidates[candidates.length - 1];
+      console.log('[CRM Scraper] Location found:', location);
+      return location;
+    } catch (err) {
+      console.warn('[CRM Scraper] Location extraction error:', err);
+      return '';
+    }
+  }
+
   // ── Основной парсинг ──────────────────────────────────────────────────
 
   function scrapeProfile() {
@@ -149,8 +247,16 @@
     let company  = '';
     let school   = '';
     let major    = '';
+    let location = '';
 
-    const { experienceSection, educationSection } = findSections();
+    const { experienceSection, educationSection, topCardSection } = findSections();
+
+    // ── Location from TopCard ──
+    if (topCardSection) {
+      location = extractLocation(topCardSection);
+    } else {
+      console.warn('[CRM Scraper] ⚠️ TopCard section not found');
+    }
 
     // ── Experience: p[0]=jobTitle, p[1]=company ──
     if (experienceSection) {
@@ -204,7 +310,7 @@
       }
     }
 
-    const result = { jobTitle, company, school, major };
+    const result = { jobTitle, company, school, major, location };
     console.log('[CRM Scraper] Profile parsed:', result);
     return result;
   }

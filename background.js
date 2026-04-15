@@ -301,7 +301,7 @@ function scrapeOneProfileForEnrich(profileUrl) {
     // Таймаут: 3с инициализация + 7×600мс скролл + запас = 30 сек
     giveUpTimer = setTimeout(() => {
       console.warn('[CRM BG] Timeout enrich profile:', profileUrl);
-      cleanup({ jobTitle: '', company: '', school: '', major: '' });
+      cleanup({ jobTitle: '', company: '', school: '', major: '', location: '' });
     }, 30000);
 
     function cleanup(result) {
@@ -317,7 +317,7 @@ function scrapeOneProfileForEnrich(profileUrl) {
 
     messageListener = (msg) => {
       if (msg.type === 'PROFILE_DATA') {
-        cleanup(msg.data || { jobTitle: '', company: '', school: '', major: '' });
+        cleanup(msg.data || { jobTitle: '', company: '', school: '', major: '', location: '' });
       }
     };
     chrome.runtime.onMessage.addListener(messageListener);
@@ -364,7 +364,7 @@ function scrapeOneProfileForEnrich(profileUrl) {
 
         } catch (err) {
           console.warn('[CRM BG] Enrich: Injection failed:', err.message);
-          cleanup({ jobTitle: '', company: '', school: '', major: '' });
+          cleanup({ jobTitle: '', company: '', school: '', major: '', location: '' });
         }
       };
 
@@ -372,7 +372,7 @@ function scrapeOneProfileForEnrich(profileUrl) {
 
     } catch (err) {
       console.error('[CRM BG] Enrich: Could not open profile tab:', err);
-      cleanup({ jobTitle: '', company: '', school: '', major: '' });
+      cleanup({ jobTitle: '', company: '', school: '', major: '', location: '' });
     }
   });
 }
@@ -397,7 +397,7 @@ async function enrichContacts(contacts, pauseMs) {
       if (G.isStopped) {
         console.log(`[CRM BG] ⛔ Pipeline stopped at ${i}/${contacts.length}`);
         for (let j = i; j < contacts.length; j++) {
-          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '' });
+          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '', location: '' });
         }
         break;
       }
@@ -407,7 +407,7 @@ async function enrichContacts(contacts, pauseMs) {
       if (!canGo) {
         console.log(`[CRM BG] ⛔ Pipeline check failed at ${i}/${contacts.length} — stopping`);
         for (let j = i; j < contacts.length; j++) {
-          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '' });
+          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '', location: '' });
         }
         break;
       }
@@ -417,7 +417,7 @@ async function enrichContacts(contacts, pauseMs) {
       if (snap.crm_sync_command === 'stop' || G.isStopped) {
         console.log(`[CRM BG] ⛔ Stop command at ${i}/${contacts.length}`);
         for (let j = i; j < contacts.length; j++) {
-          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '' });
+          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '', location: '' });
         }
         break;
       }
@@ -434,9 +434,9 @@ async function enrichContacts(contacts, pauseMs) {
       const data = await scrapeOneProfile(contact.profileUrl);
 
       if (G.isStopped) {
-        enriched.push({ ...contact, jobTitle: data?.jobTitle || '', company: data?.company || '', school: data?.school || '', major: data?.major || '' });
+        enriched.push({ ...contact, jobTitle: data?.jobTitle || '', company: data?.company || '', school: data?.school || '', major: data?.major || '', location: data?.location || '' });
         for (let j = i + 1; j < contacts.length; j++) {
-          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '' });
+          enriched.push({ ...contacts[j], jobTitle: '', company: '', school: '', major: '', location: '' });
         }
         break;
       }
@@ -446,7 +446,8 @@ async function enrichContacts(contacts, pauseMs) {
         jobTitle: data?.jobTitle || '',
         company:  data?.company  || '',
         school:   data?.school   || '',
-        major:    data?.major    || ''
+        major:    data?.major    || '',
+        location: data?.location || ''
       });
 
       if (i < contacts.length - 1 && !G.isStopped) {

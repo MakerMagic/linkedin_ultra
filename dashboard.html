@@ -398,7 +398,14 @@
                     <div class="contact-card__section contact-card__notes">
                       <span class="contact-card__label">Notes</span>
                       <textarea class="contact-card__textarea" id="contactCardNotes" placeholder="Add notes about this contact..."></textarea>
-                      <button type="button" class="contact-card__save-btn" id="contactCardSaveNotes">Save</button>
+                      <div class="contact-card__save-row">
+                        <button type="button" class="contact-card__save-btn" id="contactCardSaveNotes">Save</button>
+                        <span class="contact-card__saved-indicator" id="contactCardSavedIndicator" aria-hidden="true">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
