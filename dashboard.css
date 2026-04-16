@@ -1619,7 +1619,7 @@ html,body {
 
 /* Saved state — green with checkmark */
 .contact-card__save-btn--saved {
-  background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+  background: linear-gradient(135deg, #3ff783b8, #16a34a) !important;
   box-shadow: 0 4px 16px rgba(34, 197, 94, 0.35) !important;
 }
 
@@ -1631,13 +1631,18 @@ html,body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: #22c55e;
+  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  border-radius: 50%;
+  border: 2px solid #6b7280;
+  color: #6b7280;
   opacity: 0;
   transform: translateX(-4px);
   transition: opacity 0.25s ease, transform 0.25s ease;
   pointer-events: none;
+  flex-shrink: 0;
 }
 
 .contact-card__saved-indicator--show {
