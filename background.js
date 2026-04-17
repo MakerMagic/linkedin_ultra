@@ -165,18 +165,30 @@ function scrapeOneProfile(profileUrl) {
       cleanup(null);
     }, 25000);
 
+    async function restoreZoom() {
+      try {
+        if (tabId) {
+          await chrome.tabs.setZoom(tabId, 1.0);
+          console.log('[CRM BG] Zoom restored to 100%');
+        }
+      } catch (e) { /* ignore */ }
+    }
+
     function cleanup(result) {
       clearTimeout(giveUpTimer);
       if (messageListener)   chrome.runtime.onMessage.removeListener(messageListener);
       if (tabUpdateListener) chrome.tabs.onUpdated.removeListener(tabUpdateListener);
 
       if (tabId) {
-        chrome.tabs.remove(tabId).catch(() => {});
-        if (G.activeProfileTabId === tabId) G.activeProfileTabId = null;
-        // Возвращаем фокус на connections
-        if (G.connectionsTabId) {
-          chrome.tabs.update(G.connectionsTabId, { active: true }).catch(() => {});
-        }
+        // Restore zoom before closing tab
+        restoreZoom().finally(() => {
+          chrome.tabs.remove(tabId).catch(() => {});
+          if (G.activeProfileTabId === tabId) G.activeProfileTabId = null;
+          // Возвращаем фокус на connections
+          if (G.connectionsTabId) {
+            chrome.tabs.update(G.connectionsTabId, { active: true }).catch(() => {});
+          }
+        });
       }
       resolve(result);
     }
@@ -254,28 +266,30 @@ function scrapeOneProfile(profileUrl) {
           console.log('[CRM BG] Zoom step 2: 67%');
           await delay(100);
 
-          await chrome.tabs.setZoom(tabId, 0.5);
-          console.log('[CRM BG] Zoom step 3: 50%');
-          await delay(100);
-
           await chrome.tabs.setZoom(tabId, 0.33);
-          console.log('[CRM BG] Zoom step 4: 33% (max zoom-out)');
+          console.log('[CRM BG] Zoom: 33% (max zoom-out)');
 
+          await chrome.tabs.setZoom(tabId, 0.25);
+          console.log('[CRM BG] Zoom: 25% (max zoom-out)');
           // 3) Wait for DOM re-render after zoom
           await delay(1000);
 
-          // 4) Light scroll to trigger lazy rendering
+          // 4) Scroll to bottom using scrollingElement (works correctly with zoom)
           await chrome.scripting.executeScript({
             target: { tabId },
-            func: async () => {
-              window.scrollBy(0, Math.round(window.innerHeight * 0.8));
-              await new Promise(r => setTimeout(r, 600));
+            func: () => {
+              const scrollingEl = document.scrollingElement || document.documentElement;
+              // First scroll attempt
+              scrollingEl.scrollTop = scrollingEl.scrollHeight * 10;
+              // Force reflow and second scroll (for zoomed pages)
+              void document.body.offsetHeight;
+              scrollingEl.scrollTop = scrollingEl.scrollHeight * 10;
             }
           });
 
-          if (G.isStopped) { cleanup(null); return; }
+          // 5) Wait 2 seconds after scroll before parsing
+          await delay(2000);
 
-          // ── Инжектируем profile_scraper.js для парсинга ────────────────
           await chrome.scripting.executeScript({ target: { tabId }, files: ['profile_scraper.js'] });
           console.log('[CRM BG] profile_scraper.js injected');
 
@@ -298,6 +312,7 @@ function scrapeOneProfile(profileUrl) {
  * scrapeOneProfileForEnrich — отдельный pipeline для Data таба
  * Особенности:
  *   - zoom-out + лёгкий scroll (вместо heavy scroll loops)
+ *   - zoom восстанавливается после обработки
  */
 function scrapeOneProfileForEnrich(profileUrl) {
   return new Promise(async (resolve) => {
@@ -312,13 +327,25 @@ function scrapeOneProfileForEnrich(profileUrl) {
       cleanup({ jobTitle: '', company: '', school: '', major: '', location: '' });
     }, 25000);
 
+    async function restoreZoom() {
+      try {
+        if (tabId) {
+          await chrome.tabs.setZoom(tabId, 1.0);
+          console.log('[CRM BG] Enrich: Zoom restored to 100%');
+        }
+      } catch (e) { /* ignore */ }
+    }
+
     function cleanup(result) {
       clearTimeout(giveUpTimer);
       if (messageListener)   chrome.runtime.onMessage.removeListener(messageListener);
       if (tabUpdateListener) chrome.tabs.onUpdated.removeListener(tabUpdateListener);
 
       if (tabId) {
-        chrome.tabs.remove(tabId).catch(() => {});
+        // Restore zoom before closing tab
+        restoreZoom().finally(() => {
+          chrome.tabs.remove(tabId).catch(() => {});
+        });
       }
       resolve(result);
     }
@@ -363,24 +390,28 @@ function scrapeOneProfileForEnrich(profileUrl) {
           console.log('[CRM BG] Enrich: Zoom step 2: 67%');
           await delay(100);
 
-          await chrome.tabs.setZoom(tabId, 0.5);
-          console.log('[CRM BG] Enrich: Zoom step 3: 50%');
-          await delay(100);
-
           await chrome.tabs.setZoom(tabId, 0.33);
-          console.log('[CRM BG] Enrich: Zoom step 4: 33% (max zoom-out)');
-
+          console.log('[CRM BG] Enrich: Zoom: 33% (max zoom-out)');
+          await chrome.tabs.setZoom(tabId, 0.25);
+          console.log('[CRM BG] Enrich: Zoom: 25% (max zoom-out)');
           // 3) Wait for DOM re-render after zoom
           await delay(1000);
 
-          // 4) Light scroll to trigger lazy rendering
+          // 4) Scroll to bottom using scrollingElement (works correctly with zoom)
           await chrome.scripting.executeScript({
             target: { tabId },
-            func: async () => {
-              window.scrollBy(0, Math.round(window.innerHeight * 0.8));
-              await new Promise(r => setTimeout(r, 600));
+            func: () => {
+              const scrollingEl = document.scrollingElement || document.documentElement;
+              // First scroll attempt
+              scrollingEl.scrollTop = scrollingEl.scrollHeight * 10;
+              // Force reflow and second scroll (for zoomed pages)
+              void document.body.offsetHeight;
+              scrollingEl.scrollTop = scrollingEl.scrollHeight * 10;
             }
           });
+
+          // 5) Wait 2 seconds after scroll before parsing
+          await delay(2000);
 
           await chrome.scripting.executeScript({ target: { tabId }, files: ['profile_scraper.js'] });
           console.log('[CRM BG] Enrich: profile_scraper.js injected');

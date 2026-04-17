@@ -241,19 +241,19 @@
 
   function scrapeProfile() {
     console.log('[CRM Scraper] === Scraping profile ===');
-    console.log('[CRM Scraper] URL:', location.href);
+    console.log('[CRM Scraper] URL:', window.location.href);
 
     let jobTitle = '';
     let company  = '';
     let school   = '';
     let major    = '';
-    let location = '';
+    let locationText = '';
 
     const { experienceSection, educationSection, topCardSection } = findSections();
 
     // ── Location from TopCard ──
     if (topCardSection) {
-      location = extractLocation(topCardSection);
+      locationText = extractLocation(topCardSection);
     } else {
       console.warn('[CRM Scraper] ⚠️ TopCard section not found');
     }
@@ -310,7 +310,7 @@
       }
     }
 
-    const result = { jobTitle, company, school, major, location };
+    const result = { jobTitle, company, school, major, location: locationText };
     console.log('[CRM Scraper] Profile parsed:', result);
     return result;
   }
@@ -329,7 +329,7 @@
 
     // Отправляем в background.js
     if (chrome.runtime?.id) {
-      chrome.runtime.sendMessage({ type: 'PROFILE_DATA', data: result, url: location.href })
+      chrome.runtime.sendMessage({ type: 'PROFILE_DATA', data: result, url: window.location.href })
         .catch(err => console.warn('[CRM Scraper] sendMessage error:', err));
     }
   })();
