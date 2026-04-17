@@ -240,27 +240,36 @@ function scrapeOneProfile(profileUrl) {
         if (G.isStopped) { cleanup(null); return; }
 
         try {
-          // ── ПРАВКА 1: ФИКСИРОВАННЫЙ SCROLL ────────────────────────────
-          // Выполняем РОВНО 5 скроллов с паузой 600мс между ними.
-          // НЕ проверяем scrollHeight, НЕ ждём "конца страницы".
-          // LinkedIn SPA требует повторных скроллов чтобы подгрузить секции.
-          // Вкладка active:true → scroll реально триггерит lazy loading.
-          console.log('[CRM BG] Starting fixed scroll series (5 × 600ms)');
+          console.log('[CRM BG] Triggering content load (zoom-out + light scroll)');
+
+          // 1) Initial load wait
+          await delay(2000);
+
+          // 2) Step-by-step browser zoom-out (like Ctrl+minus multiple times)
+          await chrome.tabs.setZoom(tabId, 0.8);
+          console.log('[CRM BG] Zoom step 1: 80%');
+          await delay(100);
+
+          await chrome.tabs.setZoom(tabId, 0.67);
+          console.log('[CRM BG] Zoom step 2: 67%');
+          await delay(100);
+
+          await chrome.tabs.setZoom(tabId, 0.5);
+          console.log('[CRM BG] Zoom step 3: 50%');
+          await delay(100);
+
+          await chrome.tabs.setZoom(tabId, 0.33);
+          console.log('[CRM BG] Zoom step 4: 33% (max zoom-out)');
+
+          // 3) Wait for DOM re-render after zoom
+          await delay(1000);
+
+          // 4) Light scroll to trigger lazy rendering
           await chrome.scripting.executeScript({
             target: { tabId },
             func: async () => {
-              // Ждём инициализацию DOM — LinkedIn рендерит компоненты после load
-              await new Promise(r => setTimeout(r, 3000));
-              console.log('[CRM Scraper] Scroll series start');
-
-              // ФИКСИРОВАННАЯ серия: ровно 5 скроллов, 600мс между каждым
-              for (let i = 0; i < 5; i++) {
-                window.scrollTo(0, document.body.scrollHeight);
-                await new Promise(r => setTimeout(r, 600));
-                console.log(`[CRM Scraper] Scroll ${i + 1}/5 done`);
-              }
-
-              console.log('[CRM Scraper] Scroll series complete');
+              window.scrollBy(0, Math.round(window.innerHeight * 0.8));
+              await new Promise(r => setTimeout(r, 600));
             }
           });
 
@@ -288,8 +297,7 @@ function scrapeOneProfile(profileUrl) {
 /**
  * scrapeOneProfileForEnrich — отдельный pipeline для Data таба
  * Особенности:
- *   - 7 скроллов × 600мс (вместо 5)
- *   - 3 сек ожидание перед скроллом
+ *   - zoom-out + лёгкий scroll (вместо heavy scroll loops)
  */
 function scrapeOneProfileForEnrich(profileUrl) {
   return new Promise(async (resolve) => {
@@ -298,11 +306,11 @@ function scrapeOneProfileForEnrich(profileUrl) {
     let tabUpdateListener = null;
     let giveUpTimer       = null;
 
-    // Таймаут: 3с инициализация + 7×600мс скролл + запас = 30 сек
+    // Таймаут: 2с load + 1с zoom reflow + запас = 25 сек
     giveUpTimer = setTimeout(() => {
       console.warn('[CRM BG] Timeout enrich profile:', profileUrl);
       cleanup({ jobTitle: '', company: '', school: '', major: '', location: '' });
-    }, 30000);
+    }, 25000);
 
     function cleanup(result) {
       clearTimeout(giveUpTimer);
@@ -317,22 +325,22 @@ function scrapeOneProfileForEnrich(profileUrl) {
 
     messageListener = (msg) => {
       if (msg.type === 'PROFILE_DATA') {
-        cleanup(msg.data || { jobTitle: '', company: '', school: '', major: '', location: '' });
+        try {
+          const profilePath = new URL(profileUrl).pathname;
+          const msgPath     = msg.url ? new URL(msg.url).pathname : '';
+          if (msgPath.startsWith(profilePath)) {
+            console.log('[CRM BG] Enrich profile parsed:', msg.data);
+            cleanup(msg.data || { jobTitle: '', company: '', school: '', major: '', location: '' });
+          }
+        } catch {
+          cleanup(msg.data || { jobTitle: '', company: '', school: '', major: '', location: '' });
+        }
       }
     };
     chrome.runtime.onMessage.addListener(messageListener);
 
     try {
-      const currentWindow = await chrome.windows.getCurrent();
-
-      console.log(`[CRM BG] Enrich: Opening profile in window ${currentWindow?.id}: ${profileUrl}`);
-
-      const tab = await chrome.tabs.create({
-        url:      profileUrl,
-        active:   true,
-        windowId: currentWindow?.id
-      });
-
+      const tab = await chrome.tabs.create({ url: profileUrl, active: true });
       tabId = tab.id;
 
       tabUpdateListener = async (updatedTabId, changeInfo) => {
@@ -341,21 +349,36 @@ function scrapeOneProfileForEnrich(profileUrl) {
         tabUpdateListener = null;
 
         try {
-          // 3 сек ожидание + 7 скроллов
-          console.log('[CRM BG] Enrich: Starting scroll series (7 × 600ms)');
+          console.log('[CRM BG] Enrich: Triggering content load (zoom-out + light scroll)');
+
+          // 1) Initial load wait
+          await delay(2000);
+
+          // 2) Step-by-step browser zoom-out (like Ctrl+minus multiple times)
+          await chrome.tabs.setZoom(tabId, 0.8);
+          console.log('[CRM BG] Enrich: Zoom step 1: 80%');
+          await delay(100);
+
+          await chrome.tabs.setZoom(tabId, 0.67);
+          console.log('[CRM BG] Enrich: Zoom step 2: 67%');
+          await delay(100);
+
+          await chrome.tabs.setZoom(tabId, 0.5);
+          console.log('[CRM BG] Enrich: Zoom step 3: 50%');
+          await delay(100);
+
+          await chrome.tabs.setZoom(tabId, 0.33);
+          console.log('[CRM BG] Enrich: Zoom step 4: 33% (max zoom-out)');
+
+          // 3) Wait for DOM re-render after zoom
+          await delay(1000);
+
+          // 4) Light scroll to trigger lazy rendering
           await chrome.scripting.executeScript({
             target: { tabId },
             func: async () => {
-              await new Promise(r => setTimeout(r, 3000));
-              console.log('[CRM Enrich] Scroll series start (7 scrolls)');
-
-              for (let i = 0; i < 7; i++) {
-                window.scrollTo(0, document.body.scrollHeight);
-                await new Promise(r => setTimeout(r, 600));
-                console.log(`[CRM Enrich] Scroll ${i + 1}/7 done`);
-              }
-
-              console.log('[CRM Enrich] Scroll series complete');
+              window.scrollBy(0, Math.round(window.innerHeight * 0.8));
+              await new Promise(r => setTimeout(r, 600));
             }
           });
 
