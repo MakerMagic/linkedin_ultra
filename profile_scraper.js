@@ -22,9 +22,16 @@
 
   function cleanText(el) {
     if (!el) return '';
+    if (typeof el === 'string') {
+      return el.replace(/\s+/g, ' ').trim();
+    }
     const clone = el.cloneNode(true);
-    clone.querySelectorAll('[aria-hidden="true"], .sr-only, .visually-hidden').forEach(n => n.remove());
-    return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    clone.querySelectorAll('[aria-hidden="true"], .sr-only, .visually-hidden, [class*="hidden"]').forEach(n => n.remove());
+    let text = clone.textContent || '';
+    // Remove flag emojis (common in LinkedIn locations)
+    text = text.replace(/[\u{1F1E6}-\u{1F1FF}]{2}/gu, '');
+    text = text.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
+    return text.replace(/\s+/g, ' ').trim();
   }
 
   // ── Ожидание секций ────────────────────────────────────────────────────
@@ -117,122 +124,135 @@
 
   /**
    * Первый <a> в секции — иконка компании (svg/img без <p>).
-   * Такие ссылки игнорируем.
+   * Также исключаем медиа/галереи (ссылки с изображениями опыта).
    */
   function isIconLink(a) {
-    return !!(a.querySelector('svg') || a.querySelector('img')) && !a.querySelector('p');
+    // Иконка компании: есть svg/img но нет параграфа с текстом
+    const hasVisual = !!(a.querySelector('svg') || a.querySelector('img'));
+    const hasText = !!a.querySelector('p');
+    if (hasVisual && !hasText) return true;
+    
+    // Медиа-галерея: ссылка содержит только изображение/видео без job title
+    const isMediaGallery = a.querySelector('img, video, [class*="carousel"], [class*="gallery"]');
+    const hasJobText = a.textContent?.toLowerCase().includes('founder') || 
+                       a.textContent?.toLowerCase().includes('ceo') ||
+                       a.textContent?.toLowerCase().includes('manager') ||
+                       a.querySelector('p, h3, h4, span:not(:empty)');
+    if (isMediaGallery && !hasJobText) return true;
+    
+    return false;
   }
 
   // ── Выбор нужной ссылки ────────────────────────────────────────────────
 
   /**
-   * По ТЗ: берём все <a>, пропускаем первый (иконка), берём второй (индекс 1).
-   * Если второй отсутствует — берём последний.
+   * Берём первую значимую ссылку — это самая свежая запись (верхняя в списке).
+   * Фильтруем иконки компаний и медиа-галереи.
    */
   function getTargetLink(section) {
     if (!section) return null;
     const links = Array.from(section.querySelectorAll('a'));
     console.log(`[CRM Scraper] Links in section: ${links.length}`);
 
-    // Убираем иконки
+    // Убираем иконки и медиа
     const meaningful = links.filter(a => !isIconLink(a));
     console.log(`[CRM Scraper] Meaningful links: ${meaningful.length}`);
 
     if (meaningful.length === 0) return null;
 
-    // Берём второй (index 1) — если только один, берём его
-    return meaningful.length >= 2 ? meaningful[1] : meaningful[meaningful.length - 1];
+    // Берём ПЕРВУЮ (index 0) — самая свежая запись в Experience/Education
+    return meaningful[0];
   }
 
   // ── Location extraction from TopCard ───────────────────────────────────
 
   /**
-   * Extract location from TopCard section.
-   * Structure: TopCard → nested divs → deepest div → first <p> = location
-   * Returns empty string if not found.
+   * Check if text looks like a location (not a job title)
+   */
+  function isLocationLike(text) {
+    if (!text || text.length < 2 || text.length > 100) return false;
+    const t = text.toLowerCase();
+    // Exclude job titles
+    const jobPatterns = [' at ', ' @', ' | ', ' - ', 'looking for', 'open to work', 'hiring', 'ceo', 'founder', 'manager', 'director', 'engineer', 'specialist', 'consultant', 'freelance'];
+    if (jobPatterns.some(p => t.includes(p))) return false;
+    // Location indicators: comma, "Greater Area", countries, simple city
+    return /,/.test(text) ||
+           /\b(greater|metro|metropolitan)\s+\w+\s+area/i.test(text) ||
+           /\b(usa|united states|uk|canada|india|china|germany|france|russia|brazil|australia|japan|spain|italy|netherlands|sweden|norway|denmark|finland|poland|ukraine|belarus|kazakhstan|turkey|uae|dubai|singapore|hong kong|mexico|argentina|south africa|egypt|israel|indonesia|malaysia|thailand|vietnam|philippines|uzbekistan|georgia|romania|bulgaria|serbia|croatia|greece|portugal|ireland|iceland|estonia|latvia|lithuania|belgium|switzerland|austria|czech|slovakia|hungary)\b/i.test(text) ||
+           /^[A-Z][a-z]+(\s+[A-Z][a-z]+){0,3}$/.test(text);
+  }
+
+  /**
+   * Extract location from TopCard section using 4 fallback strategies
    */
   function extractLocation(topCardSection) {
     if (!topCardSection) return '';
-
     try {
-      // Strategy (relative DOM inside TopCard):
-      // - find <a href*="contact-info">
-      // - location can be:
-      //   (A) in the same inline container as the link (text + link)
-      //   (B) in text nodes / elements directly before the link
-      //   (C) in previous sibling <p> elements (older layout)
-
-      const contactLink = topCardSection.querySelector('a[href*="contact-info"]');
-      if (!contactLink) return '';
-
-      const linkText = cleanText(contactLink);
-
-      // (A) Closest container text minus the link label
-      const container = contactLink.closest('p,span,div');
-      if (container) {
-        let t = cleanText(container);
-        if (t) {
-          // remove the link label (e.g., "Contact info")
-          if (linkText) t = t.split(linkText).join(' ');
-          t = t.replace(/\s+/g, ' ').trim();
-          if (t) {
-            console.log('[CRM Scraper] Location found:', t);
-            return t;
+      // Strategy 1: Location icon indicator (most reliable)
+      const locationIcon = topCardSection.querySelector('svg[data-supported-dps*="16"], svg[aria-label*="location"], li-icon[type*="location"], .artdeco-icon[aria-label*="location"], svg:has(~ span):has([d*="M12"])');
+      if (locationIcon) {
+        let container = locationIcon.closest('div, span, p');
+        if (container) {
+          const text = cleanText(container);
+          if (isLocationLike(text)) {
+            console.log('[CRM Scraper] Location found (icon strategy):', text);
+            return text;
+          }
+        }
+        const parent = locationIcon.parentElement;
+        if (parent) {
+          const text = cleanText(parent);
+          if (isLocationLike(text)) {
+            console.log('[CRM Scraper] Location found (icon parent):', text);
+            return text;
           }
         }
       }
 
-      // (B) Directly preceding nodes within the link's parent
-      const parentEl = contactLink.parentElement;
-      if (parentEl) {
-        const bits = [];
+      // Strategy 2: Search all paragraphs with strict filtering
+      const paragraphs = topCardSection.querySelectorAll('p, span.text-body-small, .pv-top-card__list-item, [class*="location"], [class*="geo"]');
+      for (const p of paragraphs) {
+        const text = cleanText(p);
+        if (isLocationLike(text) && !p.closest('button, a[role="button"]')) {
+          console.log('[CRM Scraper] Location found (paragraph search):', text);
+          return text;
+        }
+      }
 
-        // Walk previous siblings (can include Text nodes)
-        let n = contactLink.previousSibling;
-        while (n) {
-          if (n.nodeType === Node.TEXT_NODE) {
-            const s = String(n.textContent || '').replace(/\s+/g, ' ').trim();
-            if (s) bits.push(s);
-          } else if (n.nodeType === Node.ELEMENT_NODE) {
-            const el = /** @type {HTMLElement} */ (n);
-            if (!el.querySelector('a')) {
-              const s = cleanText(el);
-              if (s) bits.push(s);
+      // Strategy 3: Contact-info previous sibling (legacy layout)
+      const contactLink = topCardSection.querySelector('a[href*="contact-info"]');
+      if (contactLink) {
+        const contactP = contactLink.closest('p, div');
+        if (contactP) {
+          const prevP = contactP.previousElementSibling;
+          if (prevP && (prevP.tagName === 'P' || prevP.tagName === 'DIV' || prevP.tagName === 'SPAN')) {
+            const text = cleanText(prevP);
+            if (isLocationLike(text)) {
+              console.log('[CRM Scraper] Location found (contact-info prev):', text);
+              return text;
             }
           }
-          n = n.previousSibling;
-        }
-
-        const t = bits.reverse().join(' ').replace(/\s+/g, ' ').trim();
-        if (t) {
-          console.log('[CRM Scraper] Location found:', t);
-          return t;
         }
       }
 
-      // (C) Previous sibling <p> elements before the contact-info <p>
-      const contactP = contactLink.closest('p');
-      if (!contactP) return '';
-
-      const candidates = [];
-      let cur = contactP.previousElementSibling;
-      while (cur) {
-        if (cur.tagName !== 'P') break;
-        if (!cur.querySelector('a')) {
-          const text = cleanText(cur);
-          if (text) candidates.push(text);
+      // Strategy 4: Broad search in nested containers
+      const containers = topCardSection.querySelectorAll('div, span');
+      for (const el of containers) {
+        const text = cleanText(el);
+        // Extra strict: must have comma OR country/region pattern
+        if (isLocationLike(text) && 
+            text.length > 2 && text.length < 60 &&
+            !el.closest('button, [role="button"]') &&
+            (/,/.test(text) || /\b(greater|metropolitan|region|area|usa|uk|canada|india|germany|france|denmark|sweden|norway|ukraine|kazakhstan)\b/i.test(text))) {
+          console.log('[CRM Scraper] Location found (broad search):', text);
+          return text;
         }
-        cur = cur.previousElementSibling;
       }
 
-      if (!candidates.length) return '';
-
-      // We walked backwards from the link; the farthest is the last collected.
-      const location = candidates[candidates.length - 1];
-      console.log('[CRM Scraper] Location found:', location);
-      return location;
+      console.log('[CRM Scraper] No location found in TopCard');
+      return '';
     } catch (err) {
-      console.warn('[CRM Scraper] Location extraction error:', err);
+      console.error('[CRM Scraper] Error extracting location:', err);
       return '';
     }
   }
