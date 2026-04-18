@@ -123,22 +123,27 @@
   // ── Проверка: иконка-ссылка ────────────────────────────────────────────
 
   /**
-   * Первый <a> в секции — иконка компании (svg/img без <p>).
-   * Также исключаем медиа/галереи (ссылки с изображениями опыта).
+   * Проверяет, является ли ссылка иконкой или медиа-вложением (не job entry).
+   * Исключаем:
+   * 1. Иконки компании (svg/img без <p>)
+   * 2. Медиа-вложения (ссылки с img внутри — как "Пурифайеры WOTA" на скриншоте)
+   * 3. Ссылки без /company/ в href (не job entries)
    */
   function isIconLink(a) {
+    const href = a.getAttribute('href') || '';
+    
     // Иконка компании: есть svg/img но нет параграфа с текстом
     const hasVisual = !!(a.querySelector('svg') || a.querySelector('img'));
     const hasText = !!a.querySelector('p');
     if (hasVisual && !hasText) return true;
     
-    // Медиа-галерея: ссылка содержит только изображение/видео без job title
-    const isMediaGallery = a.querySelector('img, video, [class*="carousel"], [class*="gallery"]');
-    const hasJobText = a.textContent?.toLowerCase().includes('founder') || 
-                       a.textContent?.toLowerCase().includes('ceo') ||
-                       a.textContent?.toLowerCase().includes('manager') ||
-                       a.querySelector('p, h3, h4, span:not(:empty)');
-    if (isMediaGallery && !hasJobText) return true;
+    // Медиа-вложение: есть изображение внутри (как "Пурифайеры WOTA")
+    // Это attachment к описанию работы, не отдельная работа
+    const hasImageInside = !!a.querySelector('img');
+    if (hasImageInside) return true;
+    
+    // Не job/education entry: нет /company/ И /school/ в ссылке
+    if (!href.includes('/company/') && !href.includes('/school/')) return true;
     
     return false;
   }
@@ -162,6 +167,73 @@
 
     // Берём ПЕРВУЮ (index 0) — самая свежая запись в Experience/Education
     return meaningful[0];
+  }
+
+  /**
+   * Проверяет, является ли ссылка заголовком группы (company header)
+   * с длительностью работы (типа "2 yrs 7 mos" или "Dec 2024 - Present")
+   */
+  function isCompanyHeaderLink(link) {
+    const paragraphs = Array.from(link.querySelectorAll('p'));
+    if (paragraphs.length < 2) return false;
+    
+    const p1Text = cleanText(paragraphs[1]);
+    // Company header: "2 yrs 7 mos" или "2 years 3 months" - ТОЛЬКО длительность, без других слов
+    // Job entry: "Full-time · Dec 2024 - Present" или "Jan 2023 - Dec 2024" - содержит слова или даты
+    const isPureDuration = /^\d+\s*(yrs?|mos?|years?|months?)(\s+\d+\s*(yrs?|mos?|years?|months?))?$/i.test(p1Text);
+    
+    return isPureDuration;
+  }
+
+  /**
+   * Парсим Experience с учетом множественных позиций в одной компании.
+   * LinkedIn группирует позиции: первая ссылка = company header, остальные = позиции.
+   * @returns {{jobTitle: string, company: string} | null}
+   */
+  function getExperienceData(experienceSection) {
+    if (!experienceSection) return null;
+    
+    // Находим все ссылки на компании с параграфами
+    const allLinks = Array.from(experienceSection.querySelectorAll('a'));
+    const companyLinks = allLinks.filter(a => {
+      // Ссылка на компанию и имеет текстовые параграфы
+      const href = a.getAttribute('href') || '';
+      const hasParagraphs = a.querySelectorAll('p').length > 0;
+      return href.includes('/company/') && hasParagraphs && !isIconLink(a);
+    });
+    
+    console.log(`[CRM Scraper] Company links in Experience: ${companyLinks.length}`);
+    
+    if (companyLinks.length === 0) {
+      // Fallback на стандартную логику
+      const link = getTargetLink(experienceSection);
+      if (!link) return null;
+      const paras = Array.from(link.querySelectorAll('p')).map(p => cleanText(p)).filter(Boolean);
+      return { jobTitle: paras[0] || '', company: paras[1] || '' };
+    }
+    
+    // Проверяем, является ли первая ссылка company header (группированный опыт)
+    const firstLink = companyLinks[0];
+    const isGrouped = isCompanyHeaderLink(firstLink);
+    
+    if (companyLinks.length === 1 || !isGrouped) {
+      // Обычный случай: одна позиция или не-группированный опыт
+      // p[0] = jobTitle, p[1] = company
+      const paras = Array.from(firstLink.querySelectorAll('p')).map(p => cleanText(p)).filter(Boolean);
+      return { jobTitle: paras[0] || '', company: paras[1] || '' };
+    }
+    
+    // Группированный опыт: [0] = company header (Emerge, 2 yrs 7 mos), [1] = первая позиция
+    const companyParas = Array.from(firstLink.querySelectorAll('p')).map(p => cleanText(p)).filter(Boolean);
+    const company = companyParas[0] || '';
+    
+    // Берем вторую ссылку как должность
+    const jobLink = companyLinks[1];
+    const jobParas = Array.from(jobLink.querySelectorAll('p')).map(p => cleanText(p)).filter(Boolean);
+    const jobTitle = jobParas[0] || '';
+    
+    console.log(`[CRM Scraper] Grouped experience: company="${company}", job="${jobTitle}"`);
+    return { jobTitle, company };
   }
 
   // ── Location extraction from TopCard ───────────────────────────────────
@@ -278,34 +350,62 @@
       console.warn('[CRM Scraper] ⚠️ TopCard section not found');
     }
 
-    // ── Experience: p[0]=jobTitle, p[1]=company ──
+    // ── Experience: обрабатываем множественные позиции в одной компании ──
     if (experienceSection) {
-      const link = getTargetLink(experienceSection);
-      if (link) {
-        const paras = Array.from(link.querySelectorAll('p'))
-          .map(p => cleanText(p))
-          .filter(Boolean);
-        console.log('[CRM Scraper] Experience paragraphs:', paras);
-        if (paras[0]) jobTitle = paras[0];
-        if (paras[1]) company  = paras[1];
+      const expData = getExperienceData(experienceSection);
+      if (expData) {
+        jobTitle = expData.jobTitle;
+        company = expData.company;
+        console.log('[CRM Scraper] Experience parsed:', { jobTitle, company });
       } else {
-        console.warn('[CRM Scraper] No meaningful link in Experience section');
+        console.warn('[CRM Scraper] No data in Experience section');
       }
     } else {
       console.warn('[CRM Scraper] ⚠️ Experience section not found');
     }
 
-    // ── Education: p[0]=school, p[1]=major ──
+    // ── Education: ищем запись без годов в major ──
     if (educationSection) {
-      const link = getTargetLink(educationSection);
-      if (link) {
+      // Находим все ссылки на учебные заведения
+      const eduLinks = Array.from(educationSection.querySelectorAll('a')).filter(a => {
+        const href = a.getAttribute('href') || '';
+        return (href.includes('/school/') || href.includes('/company/')) && !isIconLink(a);
+      });
+      
+      console.log(`[CRM Scraper] Education links: ${eduLinks.length}`);
+      
+      // Проверяем, содержит ли текст годы (4 цифры или 2025-2025)
+      function containsYears(text) {
+        if (!text) return false;
+        return /\b\d{4}\b/.test(text) || /\d{4}\s*[-–]\s*\d{4}/.test(text);
+      }
+      
+      // Ищем первую запись без годов в major
+      for (const link of eduLinks) {
         const paras = Array.from(link.querySelectorAll('p'))
           .map(p => cleanText(p))
           .filter(Boolean);
-        console.log('[CRM Scraper] Education paragraphs:', paras);
-        if (paras[0]) school = paras[0];
-        if (paras[1]) major  = paras[1];
-      } else {
+        
+        if (paras.length >= 2 && !containsYears(paras[1])) {
+          school = paras[0] || '';
+          major = paras[1] || '';
+          console.log('[CRM Scraper] Education found (no years):', { school, major });
+          break;
+        }
+      }
+      
+      // Если все записи с годами — берем первую, major = 'not found'
+      if (!school && eduLinks.length > 0) {
+        const firstLink = eduLinks[0];
+        const paras = Array.from(firstLink.querySelectorAll('p'))
+          .map(p => cleanText(p))
+          .filter(Boolean);
+        school = paras[0] || '';
+        major = containsYears(paras[1]) ? 'not found' : (paras[1] || '');
+        console.log('[CRM Scraper] Education (years in major):', { school, major });
+      }
+      
+      if (!school) {
         console.warn('[CRM Scraper] No meaningful link in Education section');
       }
     } else {
@@ -353,5 +453,4 @@
         .catch(err => console.warn('[CRM Scraper] sendMessage error:', err));
     }
   })();
-
 })();
