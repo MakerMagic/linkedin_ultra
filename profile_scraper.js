@@ -132,18 +132,22 @@
   function isIconLink(a) {
     const href = a.getAttribute('href') || '';
     
-    // Иконка компании: есть svg/img но нет параграфа с текстом
-    const hasVisual = !!(a.querySelector('svg') || a.querySelector('img'));
-    const hasText = !!a.querySelector('p');
-    if (hasVisual && !hasText) return true;
+    const hasImg = !!a.querySelector('img');
+    const hasSvg = !!a.querySelector('svg');
+    const hasP   = !!a.querySelector('p');
     
-    // Медиа-вложение: есть изображение внутри (как "Пурифайеры WOTA")
-    // Это attachment к описанию работы, не отдельная работа
-    const hasImageInside = !!a.querySelector('img');
-    if (hasImageInside) return true;
+    // Случай 1: иконка (svg/img без текстового параграфа)
+    if ((hasSvg || hasImg) && !hasP) return true;
+    
+    // Случай 2: медиа-вложение (img + p в одном <a> = attachment-карточка)
+    // Как "Пурифайеры WOTA" — превью с картинкой и подписью
+    // НО: исключаем образовательные учреждения (/school/) — у них логотипы с названием
+    const isSchoolLink = href.includes('/school/');
+    if (hasImg && hasP && !isSchoolLink) return true;
     
     // Не job/education entry: нет /company/ И /school/ в ссылке
-    if (!href.includes('/company/') && !href.includes('/school/')) return true;
+    const isCompanyOrSchool = href.includes('/company/') || isSchoolLink;
+    if (!isCompanyOrSchool) return true;
     
     return false;
   }
@@ -178,11 +182,15 @@
     if (paragraphs.length < 2) return false;
     
     const p1Text = cleanText(paragraphs[1]);
-    // Company header: "2 yrs 7 mos" или "2 years 3 months" - ТОЛЬКО длительность, без других слов
-    // Job entry: "Full-time · Dec 2024 - Present" или "Jan 2023 - Dec 2024" - содержит слова или даты
-    const isPureDuration = /^\d+\s*(yrs?|mos?|years?|months?)(\s+\d+\s*(yrs?|mos?|years?|months?))?$/i.test(p1Text);
     
-    return isPureDuration;
+    // Company header содержит длительность работы в компании (общая)
+    // Примеры: "3 yrs 5 mos", "Full-time · 3 yrs 5 mos", "2 years 10 months"
+    // Job entry содержит даты: "Oct 2025 - Present · 7 mos", "Dec 2022 - Sep 2025"
+    const hasDurationPattern = /\d+\s*(yrs?|mos?|years?|months?)/i.test(p1Text);
+    const hasDateRange = /\w{3,}\s+\d{4}\s*-\s*(Present|\w{3,}\s+\d{4})/i.test(p1Text);
+    
+    // Если есть длительность и НЕТ дат конкретных (Jan 2023 - Dec 2024) — это company header
+    return hasDurationPattern && !hasDateRange;
   }
 
   /**
