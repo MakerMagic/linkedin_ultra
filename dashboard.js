@@ -124,9 +124,10 @@
       p.classList.toggle('main-panel--active', p.getAttribute('data-panel') === viewId);
     });
     var titles = {
-      leads:  'LinkedIn CRM вЂ” Leads',
-      search: 'LinkedIn CRM вЂ” Search',
-      help:   'LinkedIn CRM вЂ” Help'
+      leads:      'LinkedIn CRM — Leads',
+      search:     'LinkedIn CRM — Search',
+      help:       'LinkedIn CRM — Help',
+      networking: 'LinkedIn CRM — Networking'
     };
     document.title = titles[viewId] || 'LinkedIn CRM';
   }
