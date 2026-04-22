@@ -1,5 +1,5 @@
-/**
- * dashboard.js — LinkedIn CRM v2.5
+﻿/**
+ * dashboard.js вЂ” LinkedIn CRM v2.5
  *
  * Changes vs v2.4:
  *   - Navigation: "Sync" nav item renamed to "Leads"
@@ -10,19 +10,19 @@
 (function () {
   'use strict';
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // 👉 DEMO VIDEO — Help tab (with controls)
+  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+  // рџ‘‰ DEMO VIDEO вЂ” Help tab (with controls)
   const DEMO_VIDEO_URL = 'PASTE_YOUR_VIDEO_LINK_HERE';
 
-  // 👉 HELP VIDEO — split screen popover (autoplay loop muted)
+  // рџ‘‰ HELP VIDEO вЂ” split screen popover (autoplay loop muted)
   const HELP_VIDEO_URL = 'PASTE_YOUR_VIDEO_LINK_HERE';
-  // ═══════════════════════════════════════════════════════════════════════
+  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
   const CIRCUMFERENCE      = 2 * Math.PI * 52;
   const HEARTBEAT_STALE_MS = 15000;
   const PAGE_SIZE          = 15;
 
-  // ── DOM refs ──────────────────────────────────────────────────────────
+  // в”Ђв”Ђ DOM refs в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   var arc        = document.getElementById('progressArc');
   var pctEl      = document.getElementById('progressPercent');
   var statusEl   = document.getElementById('syncStatus');
@@ -38,7 +38,7 @@
   var navButtons = document.querySelectorAll('.nav__item[data-nav]:not([disabled])');
   var panels     = document.querySelectorAll('.main-panel[data-panel]');
 
-  // ── Data table refs ───────────────────────────────────────────────────
+  // в”Ђв”Ђ Data table refs в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   var ctableBody    = document.getElementById('ctableBody');
   var tableFooter   = document.getElementById('tableFooter');
   var paginationEl  = document.getElementById('tablePagination');
@@ -46,12 +46,12 @@
   var dataCardCount = document.getElementById('dataCardCount');
   var dataTabBadge  = document.getElementById('dataTabBadge');
 
-  // ── Table state ────────────────────────────────────────────────────────
+  // в”Ђв”Ђ Table state в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   var tableContacts    = [];
   var tableCurrentPage = 1;
   var currentLeadsTab  = 'sync';
 
-  // ── Demo video (Help tab) ──────────────────────────────────────────────
+  // в”Ђв”Ђ Demo video (Help tab) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   var demoVideo    = document.getElementById('demoVideo');
   var demoVideoSrc = document.getElementById('demoVideoSrc');
   if (demoVideo && demoVideoSrc && DEMO_VIDEO_URL !== 'PASTE_YOUR_VIDEO_LINK_HERE') {
@@ -59,7 +59,7 @@
     demoVideo.load();
   }
 
-  // ── Split screen popover video ─────────────────────────────────────────
+  // в”Ђв”Ђ Split screen popover video в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   var helpVideoEl  = document.getElementById('w4m9qx');
   var helpVideoSrc = document.getElementById('w4m9qxSrc');
   if (helpVideoEl && helpVideoSrc && HELP_VIDEO_URL !== 'PASTE_YOUR_VIDEO_LINK_HERE') {
@@ -93,7 +93,7 @@
     });
   }
 
-  // ── FAQ accordion ──────────────────────────────────────────────────────
+  // в”Ђв”Ђ FAQ accordion в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   document.querySelectorAll('.faq__question').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var expanded = btn.getAttribute('aria-expanded') === 'true';
@@ -112,7 +112,7 @@
     });
   });
 
-  // ── Main navigation ────────────────────────────────────────────────────
+  // в”Ђв”Ђ Main navigation в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function setActiveView(viewId) {
     navButtons.forEach(function (btn) {
       var id = btn.getAttribute('data-nav');
@@ -124,9 +124,9 @@
       p.classList.toggle('main-panel--active', p.getAttribute('data-panel') === viewId);
     });
     var titles = {
-      leads:  'LinkedIn CRM — Leads',
-      search: 'LinkedIn CRM — Search',
-      help:   'LinkedIn CRM — Help'
+      leads:  'LinkedIn CRM вЂ” Leads',
+      search: 'LinkedIn CRM вЂ” Search',
+      help:   'LinkedIn CRM вЂ” Help'
     };
     document.title = titles[viewId] || 'LinkedIn CRM';
   }
@@ -147,7 +147,7 @@
     });
   });
 
-  // ── Leads sub-tab switching ────────────────────────────────────────────
+  // в”Ђв”Ђ Leads sub-tab switching в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function setLeadsTab(tabId) {
     currentLeadsTab = tabId;
 
@@ -184,7 +184,7 @@
     });
   });
 
-  // ── Progress ring ──────────────────────────────────────────────────────
+  // в”Ђв”Ђ Progress ring в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function setRingProgress(pct) {
     var p = Math.max(0, Math.min(100, pct));
     if (arc) {
@@ -194,7 +194,7 @@
     if (pctEl) pctEl.textContent = String(Math.round(p));
   }
 
-  // ── ETA formatting ─────────────────────────────────────────────────────
+  // в”Ђв”Ђ ETA formatting в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function formatEta(s) {
     if (s === null || s === undefined || s < 0) return null;
     if (s < 60)  return '~' + Math.max(1, Math.round(s)) + 's';
@@ -204,7 +204,7 @@
     return rm > 0 ? '~' + h + 'h ' + rm + 'min' : '~' + h + 'h';
   }
 
-  // ── State → UI ─────────────────────────────────────────────────────────
+  // в”Ђв”Ђ State в†’ UI в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function applyState(status, phase, count, percent, total, label, etaSeconds) {
     var running     = status === 'running';
     var isDone      = status === 'done';
@@ -233,10 +233,10 @@
     if (statusEl) {
       statusEl.textContent = ({
         idle:    'Waiting to start',
-        running: 'Syncing…',
+        running: 'SyncingвЂ¦',
         stopped: 'Stopped',
-        done:    'Completed ✓',
-        error:   'Error — check LinkedIn console'
+        done:    'Completed вњ“',
+        error:   'Error вЂ” check LinkedIn console'
       })[status] || 'Waiting to start';
     }
 
@@ -257,7 +257,7 @@
     }
   }
 
-  // ── Data tab badge ─────────────────────────────────────────────────────
+  // в”Ђв”Ђ Data tab badge в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function updateDataBadge(count) {
     if (!dataTabBadge) return;
     if (count > 0) {
@@ -268,7 +268,7 @@
     }
   }
 
-  // ── Init storage load ──────────────────────────────────────────────────
+  // в”Ђв”Ђ Init storage load в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   var ALL_KEYS = [
     'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
     'crm_sync_percent', 'crm_sync_total', 'crm_sync_label',
@@ -315,7 +315,7 @@
     });
   });
 
-  // ── Modal ──────────────────────────────────────────────────────────────
+  // в”Ђв”Ђ Modal в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function showModal() { if (restartModal) restartModal.hidden = false; }
   function hideModal() { if (restartModal) restartModal.hidden = true; }
 
@@ -333,9 +333,9 @@
     if (e.key === 'Escape' && restartModal && !restartModal.hidden) hideModal();
   });
 
-  // ── Restart ────────────────────────────────────────────────────────────
+  // в”Ђв”Ђ Restart в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   async function performRestart() {
-    if (statusEl) statusEl.textContent = 'Resetting…';
+    if (statusEl) statusEl.textContent = 'ResettingвЂ¦';
     if (btnStart) btnStart.disabled = true;
     await new Promise(function (resolve) {
       chrome.runtime.sendMessage({ type: 'RESTART_SYNC' }, function (r) {
@@ -343,15 +343,15 @@
         resolve();
       });
     });
-    if (statusEl) statusEl.textContent = 'Reloading LinkedIn…';
+    if (statusEl) statusEl.textContent = 'Reloading LinkedInвЂ¦';
     await new Promise(function (r) { setTimeout(r, 4000); });
     await handleStart();
   }
 
-  // ── Start ──────────────────────────────────────────────────────────────
+  // в”Ђв”Ђ Start в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   async function handleStart() {
     if (btnStart) btnStart.disabled = true;
-    if (statusEl) statusEl.textContent = 'Connecting to LinkedIn…';
+    if (statusEl) statusEl.textContent = 'Connecting to LinkedInвЂ¦';
     var ok = await new Promise(function (resolve) {
       chrome.runtime.sendMessage({ type: 'ENSURE_CONTENT_SCRIPT' }, function (r) {
         if (chrome.runtime.lastError) { resolve(true); return; }
@@ -380,7 +380,7 @@
     });
   }
 
-  // ── CSV / TSV export ───────────────────────────────────────────────────
+  // в”Ђв”Ђ CSV / TSV export в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function downloadTSV(contacts) {
     if (!contacts || !contacts.length) return;
     function clean(v) { return String(v || '').replace(/\t/g, ' ').replace(/\r?\n/g, ' '); }
@@ -414,7 +414,7 @@
     });
   }
 
-  // ── HTML escape ────────────────────────────────────────────────────────
+  // в”Ђв”Ђ HTML escape в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function esc(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -423,7 +423,7 @@
       .replace(/"/g, '&quot;');
   }
 
-  // ── Data table renderer ────────────────────────────────────────────────
+  // в”Ђв”Ђ Data table renderer в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function renderDataTableWithSelection() {
     if (!ctableBody) return;
 
@@ -448,7 +448,7 @@
         : '';
     }
 
-    // ── Empty state ──
+    // в”Ђв”Ђ Empty state в”Ђв”Ђ
     if (slice.length === 0) {
       ctableBody.innerHTML =
         '<tr><td colspan="9">' +
@@ -469,7 +469,7 @@
       return;
     }
 
-    // ── Rows ──
+    // в”Ђв”Ђ Rows в”Ђв”Ђ
     var rows = slice.map(function (c, i) {
       var rowNum   = start + i + 1;
       var name     = esc(c.fullName  || '');
@@ -482,31 +482,31 @@
       if (url) {
         nameCell =
           '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + name + '">' +
-            '<span>' + (name || '—') + '</span>' +
+            '<span>' + (name || 'вЂ”') + '</span>' +
             '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
               '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
             '</svg>' +
           '</a>';
       } else {
-        nameCell = '<span>' + (name || '<span class="ctable__dash">—</span>') + '</span>';
+        nameCell = '<span>' + (name || '<span class="ctable__dash">вЂ”</span>') + '</span>';
       }
 
       return '<tr>' +
         '<td class="ctable__num">' + rowNum + '</td>' +
         '<td>' + nameCell + '</td>' +
-        '<td>' + (jobTitle || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (company  || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (school   || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (jobTitle || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (company  || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (school   || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
       '</tr>';
     });
 
     ctableBody.innerHTML = rows.join('');
 
-    // ── Footer ──
+    // в”Ђв”Ђ Footer в”Ђв”Ђ
     if (tableFooter) tableFooter.hidden = false;
 
     if (paginationInfo) {
-      paginationInfo.textContent = start + 1 + '–' + end + ' of ' + total.toLocaleString();
+      paginationInfo.textContent = start + 1 + 'вЂ“' + end + ' of ' + total.toLocaleString();
     }
 
     if (paginationEl) {
@@ -518,7 +518,7 @@
     }
   }
 
-  // ── Pagination renderer ────────────────────────────────────────────────
+  // в”Ђв”Ђ Pagination renderer в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function getPageRange(cur, total) {
     if (total <= 7) {
       var arr = [];
@@ -529,9 +529,9 @@
     var left  = Math.max(2, cur - delta);
     var right = Math.min(total - 1, cur + delta);
     var range = [1];
-    if (left > 2)        range.push('…');
+    if (left > 2)        range.push('вЂ¦');
     for (var p = left; p <= right; p++) range.push(p);
-    if (right < total - 1) range.push('…');
+    if (right < total - 1) range.push('вЂ¦');
     range.push(total);
     return range;
   }
@@ -552,8 +552,8 @@
 
     // Pages
     getPageRange(cur, totalPages).forEach(function (p) {
-      if (p === '…') {
-        html += '<span class="page-ellipsis" aria-hidden="true">…</span>';
+      if (p === 'вЂ¦') {
+        html += '<span class="page-ellipsis" aria-hidden="true">вЂ¦</span>';
       } else {
         html +=
           '<button class="page-btn' + (p === cur ? ' page-btn--active' : '') +
@@ -596,7 +596,7 @@
     });
   }
 
-  // ── Search: industries ─────────────────────────────────────────────────
+  // в”Ђв”Ђ Search: industries в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   var INDUSTRY_OPTIONS = [
     { id: 'finance',        label: 'Finance'        },
     { id: 'consulting',     label: 'Consulting'     },
@@ -647,9 +647,9 @@
     });
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
+  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
   // ENRICH LEADS MODULE (Data Tab)
-  // ═══════════════════════════════════════════════════════════════════════
+  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
   var enrichBar          = document.getElementById('enrichBar');
   var enrichSelectAll    = document.getElementById('enrichSelectAll');
@@ -819,7 +819,7 @@
     if (!enrichStats) return;
     var count = selectedRows.size;
     var filteredCount = getFilteredIndices().length;
-    enrichStats.textContent = (count > 0 ? ('Selected: ' + count + ' · ') : '') + 'Showing: ' + filteredCount;
+    enrichStats.textContent = (count > 0 ? ('Selected: ' + count + ' В· ') : '') + 'Showing: ' + filteredCount;
   }
 
   function updateEnrichButton() {
@@ -843,8 +843,8 @@
 
 
     getPageRange(cur, totalPages).forEach(function (p) {
-      if (p === '…') {
-        html += '<span class="page-ellipsis" aria-hidden="true">…</span>';
+      if (p === 'вЂ¦') {
+        html += '<span class="page-ellipsis" aria-hidden="true">вЂ¦</span>';
       } else {
         html +=
           '<button class="page-btn' + (p === cur ? ' page-btn--active' : '') +
@@ -955,7 +955,7 @@
       var urlCell;
       if (url) {
         var displayUrl = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + '…';
+        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + 'вЂ¦';
         urlCell =
           '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
             '<span>' + displayUrl + '</span>' +
@@ -964,7 +964,7 @@
             '</svg>' +
           '</a>';
       } else {
-        urlCell = '<span class="ctable__dash">—</span>';
+        urlCell = '<span class="ctable__dash">вЂ”</span>';
       }
 
 
@@ -978,10 +978,10 @@
 
       var firstNameCell = firstName
         ? '<span class="ctable__name" data-index="' + absIndex + '">' + firstName + '</span>'
-        : '<span class="ctable__dash">—</span>';
+        : '<span class="ctable__dash">вЂ”</span>';
       var lastNameCell = lastName
         ? '<span class="ctable__name" data-index="' + absIndex + '">' + lastName + '</span>'
-        : '<span class="ctable__dash">—</span>';
+        : '<span class="ctable__dash">вЂ”</span>';
 
       return '<tr class="' + trClass + '">' +
         checkboxCell +
@@ -989,10 +989,10 @@
         '<td>' + firstNameCell + '</td>' +
         '<td>' + lastNameCell + '</td>' +
         '<td>' + urlCell + '</td>' +
-        '<td>' + (jobTitle  || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (company   || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (school    || '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (major     || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (jobTitle  || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (company   || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (school    || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (major     || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
       '</tr>';
     });
 
@@ -1025,7 +1025,7 @@
 
     if (paginationInfo) {
       if (total === 0) paginationInfo.textContent = '0 of 0';
-      else paginationInfo.textContent = (start + 1) + '–' + end + ' of ' + total.toLocaleString();
+      else paginationInfo.textContent = (start + 1) + 'вЂ“' + end + ' of ' + total.toLocaleString();
     }
 
 
@@ -1065,7 +1065,7 @@
 
     if (contactCardUrl) {
       contactCardUrl.href = c.profileUrl || '#';
-      contactCardUrl.textContent = c.profileUrl || '—';
+      contactCardUrl.textContent = c.profileUrl || 'вЂ”';
     }
 
     if (contactCardJobTitle) {
@@ -1081,7 +1081,7 @@
       contactCardMajor.textContent = c.major || '';
     }
     if (contactCardRegion) {
-      contactCardRegion.textContent = c.region || '—';
+      contactCardRegion.textContent = c.region || 'вЂ”';
     }
     if (contactCardNotes) {
       contactCardNotes.value = c.notes || '';
@@ -1434,7 +1434,7 @@
 
   renderDataTable = renderDataTableWithSelection;
 
-  // ── Save contacts to storage ────────────────────────────────────────────
+  // в”Ђв”Ђ Save contacts to storage в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function saveContactsToStorage() {
     return new Promise(function (resolve) {
       chrome.storage.local.set({ crm_contacts: tableContacts }, function () {
@@ -1502,4 +1502,200 @@
       URL.revokeObjectURL(url);
     });
   }
+
+
+  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+  // NETWORKING MODULE
+  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+
+  var networkingKeywordsInput = document.getElementById('networkingKeywords');
+  var networkingKeywordsList = document.getElementById('networkingKeywordsList');
+  var networkingKeywordsSection = document.getElementById('networkingKeywordsSection');
+  var btnStartNetworking = document.getElementById('btnStartNetworking');
+  var networkingList = document.getElementById('networkingList');
+  var networkingListContent = document.getElementById('networkingListContent');
+  var networkingEmptyState = document.getElementById('networkingEmptyState');
+  var sentInvitesBadge = document.getElementById('sentInvitesBadge');
+
+  var selectedKeywords = [];
+  var sentInvites = [];
+
+  function loadSentInvites() {
+    chrome.storage.local.get(['crm_sent_invites'], function (data) {
+      sentInvites = data.crm_sent_invites || [];
+      updateSentInvitesUI();
+    });
+  }
+
+  function saveSentInvites() {
+    chrome.storage.local.set({ crm_sent_invites: sentInvites });
+  }
+
+  function updateSentInvitesBadge() {
+    if (!sentInvitesBadge) return;
+    var count = sentInvites.length;
+    if (count > 0) {
+      sentInvitesBadge.textContent = count > 99 ? '99+' : String(count);
+      sentInvitesBadge.hidden = false;
+    } else {
+      sentInvitesBadge.hidden = true;
+    }
+  }
+
+  function createKeywordTag(keyword) {
+    var tag = document.createElement('span');
+    tag.className = 'networking-tag';
+    tag.setAttribute('data-keyword', keyword);
+    tag.innerHTML = 
+      esc(keyword) +
+      '<button type="button" class="networking-tag__remove" aria-label="Remove ' + esc(keyword) + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+          '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
+        '</svg>' +
+      '</button>';
+    
+    tag.querySelector('.networking-tag__remove').addEventListener('click', function () {
+      removeKeyword(keyword);
+    });
+    
+    return tag;
+  }
+
+  function addKeyword(keyword) {
+    keyword = keyword.trim();
+    if (!keyword) return;
+    if (selectedKeywords.includes(keyword)) return;
+    if (selectedKeywords.length >= 10) {
+      alert('Maximum 10 keywords allowed');
+      return;
+    }
+    
+    selectedKeywords.push(keyword);
+    renderKeywords();
+    saveNetworkingKeywords();
+  }
+
+  function removeKeyword(keyword) {
+    selectedKeywords = selectedKeywords.filter(function (k) { return k !== keyword; });
+    renderKeywords();
+    saveNetworkingKeywords();
+  }
+
+  function renderKeywords() {
+    if (!networkingKeywordsList) return;
+    
+    networkingKeywordsList.innerHTML = '';
+    selectedKeywords.forEach(function (keyword) {
+      networkingKeywordsList.appendChild(createKeywordTag(keyword));
+    });
+    
+    if (networkingKeywordsSection) {
+      networkingKeywordsSection.hidden = selectedKeywords.length === 0;
+    }
+  }
+
+  function saveNetworkingKeywords() {
+    chrome.storage.local.set({ crm_networking_keywords: selectedKeywords });
+  }
+
+  function loadNetworkingKeywords() {
+    chrome.storage.local.get(['crm_networking_keywords'], function (data) {
+      selectedKeywords = data.crm_networking_keywords || [];
+      renderKeywords();
+    });
+  }
+
+  if (networkingKeywordsInput) {
+    networkingKeywordsInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var value = networkingKeywordsInput.value.trim();
+        if (value) {
+          var keywords = value.split(',').map(function (k) { return k.trim(); }).filter(Boolean);
+          keywords.forEach(addKeyword);
+          networkingKeywordsInput.value = '';
+        }
+      }
+    });
+  }
+
+  if (btnStartNetworking) {
+    btnStartNetworking.addEventListener('click', function () {
+      if (selectedKeywords.length === 0) {
+        alert('Please add at least one keyword');
+        return;
+      }
+      
+      saveNetworkingKeywords();
+      
+      chrome.tabs.create({
+        url: 'https://www.linkedin.com/mynetwork/grow/',
+        active: true
+      });
+    });
+  }
+
+  function setNetworkingTab(tabId) {
+    document.querySelectorAll('.networking-tab').forEach(function (btn) {
+      var active = btn.getAttribute('data-networking-tab') === tabId;
+      btn.classList.toggle('networking-tab--active', active);
+      btn.setAttribute('aria-selected', String(active));
+    });
+    
+    document.querySelectorAll('.networking-subpanel').forEach(function (panel) {
+      var active = panel.getAttribute('data-networking-panel') === tabId;
+      panel.classList.toggle('networking-subpanel--active', active);
+      panel.hidden = !active;
+    });
+    
+    if (tabId === 'sent') {
+      loadSentInvites();
+    }
+  }
+
+  document.querySelectorAll('.networking-tab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.getAttribute('data-networking-tab');
+      if (id) setNetworkingTab(id);
+    });
+  });
+
+  function updateSentInvitesUI() {
+    updateSentInvitesBadge();
+    
+    if (!networkingList || !networkingListContent || !networkingEmptyState) return;
+    
+    if (sentInvites.length === 0) {
+      networkingList.hidden = true;
+      networkingEmptyState.hidden = false;
+      return;
+    }
+    
+    networkingEmptyState.hidden = true;
+    networkingList.hidden = false;
+    
+    networkingListContent.innerHTML = sentInvites.map(function (invite) {
+      return '<div class="networking-list__item">' +
+        '<span>' + esc(invite.firstName || '') + '</span>' +
+        '<span>' + esc(invite.lastName || '') + '</span>' +
+        '<span>' +
+          (invite.profileUrl 
+            ? '<a href="' + esc(invite.profileUrl) + '" target="_blank" rel="noopener noreferrer" class="networking-list__url">' + esc(invite.profileUrl) + '</a>'
+            : '<span class="ctable__dash">вЂ”</span>') +
+        '</span>' +
+        '<span>' + esc(invite.description || '') + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  loadNetworkingKeywords();
+  loadSentInvites();
+
+  chrome.storage.onChanged.addListener(function (changes, area) {
+    if (area !== 'local') return;
+    if (changes.crm_sent_invites) {
+      sentInvites = changes.crm_sent_invites.newValue || [];
+      updateSentInvitesUI();
+    }
+  });
 })();
