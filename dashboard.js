@@ -1433,7 +1433,7 @@
   });
 
 
-  renderDataTable = renderDataTableWithSelection;
+  var renderDataTable = renderDataTableWithSelection;
 
   // в”Ђв”Ђ Save contacts to storage в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   function saveContactsToStorage() {
