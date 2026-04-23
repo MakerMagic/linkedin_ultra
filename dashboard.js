@@ -1564,14 +1564,22 @@
 
   function addKeyword(keyword) {
     keyword = keyword.trim();
-    if (!keyword) return;
-    if (selectedKeywords.includes(keyword)) return;
+    console.log('[Networking] Adding keyword:', keyword);
+    if (!keyword) {
+      console.log('[Networking] Empty keyword, skipping');
+      return;
+    }
+    if (selectedKeywords.includes(keyword)) {
+      console.log('[Networking] Keyword already exists:', keyword);
+      return;
+    }
     if (selectedKeywords.length >= 10) {
       alert('Maximum 10 keywords allowed');
       return;
     }
     
     selectedKeywords.push(keyword);
+    console.log('[Networking] Keywords now:', selectedKeywords);
     renderKeywords();
     saveNetworkingKeywords();
   }
@@ -1583,7 +1591,11 @@
   }
 
   function renderKeywords() {
-    if (!networkingKeywordsList) return;
+    console.log('[Networking] Rendering keywords:', selectedKeywords);
+    if (!networkingKeywordsList) {
+      console.error('[Networking] Keywords list element not found');
+      return;
+    }
     
     networkingKeywordsList.innerHTML = '';
     selectedKeywords.forEach(function (keyword) {
@@ -1592,6 +1604,7 @@
     
     if (networkingKeywordsSection) {
       networkingKeywordsSection.hidden = selectedKeywords.length === 0;
+      console.log('[Networking] Section visibility:', !networkingKeywordsSection.hidden);
     }
   }
 
@@ -1607,17 +1620,21 @@
   }
 
   if (networkingKeywordsInput) {
-    networkingKeywordsInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
+    networkingKeywordsInput.addEventListener('keyup', function (e) {
+      if (e.key === 'Enter' || e.code === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
         var value = networkingKeywordsInput.value.trim();
         if (value) {
           var keywords = value.split(',').map(function (k) { return k.trim(); }).filter(Boolean);
           keywords.forEach(addKeyword);
           networkingKeywordsInput.value = '';
+          networkingKeywordsInput.focus();
         }
       }
     });
+  } else {
+    console.error('[Networking] Keywords input not found');
   }
 
   if (btnStartNetworking) {

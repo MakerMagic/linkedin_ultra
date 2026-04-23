@@ -1810,6 +1810,10 @@ html,body {
 
 .networking-tab--active svg { opacity: 1; }
 
+.ruka_svg {
+  transform: translateY(2px);
+}
+
 .networking-tab__badge {
   display: inline-flex;
   align-items: center;
