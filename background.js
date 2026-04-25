@@ -21,6 +21,10 @@ const LINKEDIN_CONNECTIONS_PATTERNS = [
   'https://www.linkedin.com/mynetwork/invite-connect/connections/',
   'https://www.linkedin.com/mynetwork/invite-connect/connections/*'
 ];
+const LINKEDIN_GROW_PATTERNS = [
+  'https://www.linkedin.com/mynetwork/grow/',
+  'https://www.linkedin.com/mynetwork/grow/*'
+];
 const DASHBOARD_PATH = 'dashboard.html';
 
 // ── ГЛОБАЛЬНЫЙ SINGLETON STATE ────────────────────────────────────────────
@@ -32,6 +36,91 @@ const G = {
   connectionsTabId:    null,
   connectionsWindowId: chrome.windows.WINDOW_ID_NONE
 };
+
+const growScrolledTabs = new Set();
+
+function isGrowUrl(url) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.origin === 'https://www.linkedin.com' && u.pathname.indexOf('/mynetwork/grow') === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function triggerGrowScroll(tabId) {
+  let zoomChanged = false;
+  try {
+    console.log('[CRM BG] Grow: waiting 2000ms before scroll');
+    await delay(2000);
+
+    let tab;
+    try { tab = await chrome.tabs.get(tabId); }
+    catch { return; }
+
+    try {
+      if (tab?.windowId !== undefined && tab.windowId !== chrome.windows.WINDOW_ID_NONE) {
+        await chrome.windows.update(tab.windowId, { focused: true });
+      }
+      await chrome.tabs.update(tabId, { active: true });
+    } catch (e) {
+      console.warn('[CRM BG] Grow: could not focus tab:', e?.message || e);
+    }
+
+    await delay(300);
+
+    function randomInt(min, max) {
+      return Math.floor(min + Math.random() * (max - min));
+    }
+
+    async function zoomStep(zoomValue) {
+      try {
+        await chrome.tabs.setZoom(tabId, zoomValue);
+        zoomChanged = true;
+        console.log('[CRM BG] Grow: zoom', Math.round(zoomValue * 100) + '%');
+      } catch (e) {
+        console.warn('[CRM BG] Grow: setZoom failed:', e?.message || e);
+      }
+      await delay(randomInt(500, 1001));
+    }
+
+    await zoomStep(0.75);
+    await zoomStep(0.5);
+    await zoomStep(0.25);
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const scrollingEl = document.scrollingElement || document.documentElement;
+        scrollingEl.scrollTop = scrollingEl.scrollHeight * 10;
+        void document.body.offsetHeight;
+        scrollingEl.scrollTop = scrollingEl.scrollHeight * 10;
+      }
+    });
+
+    console.log('[CRM BG] Grow: scroll done');
+  } catch (err) {
+    console.warn('[CRM BG] Grow: scroll failed:', err?.message || err);
+  } finally {
+    void zoomChanged;
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') return;
+  if (!isGrowUrl(tab.url)) {
+    if (growScrolledTabs.has(tabId)) growScrolledTabs.delete(tabId);
+    return;
+  }
+  if (growScrolledTabs.has(tabId)) return;
+  growScrolledTabs.add(tabId);
+  triggerGrowScroll(tabId);
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (growScrolledTabs.has(tabId)) growScrolledTabs.delete(tabId);
+});
 
 async function killPipeline(reason) {
   console.log(`[CRM BG] ⛔ Kill pipeline: ${reason}`);
