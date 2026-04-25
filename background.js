@@ -99,6 +99,63 @@ async function triggerGrowScroll(tabId) {
       }
     });
 
+    const result = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async () => {
+        function sleep(ms) {
+          return new Promise(r => setTimeout(r, ms));
+        }
+
+        function findTargetSection() {
+          const sections = Array.from(document.querySelectorAll('section[componentkey], section[componentKey]'));
+          for (const section of sections) {
+            const key = (section.getAttribute('componentkey') || section.getAttribute('componentKey') || '').toLowerCase();
+            if (!key.includes('auto-component')) continue;
+
+            const h3 = section.querySelector('h3');
+            const h3Text = (h3 && h3.textContent ? h3.textContent : '').trim();
+            if (h3Text.toLowerCase().includes('popular')) continue;
+
+            return section;
+          }
+          return null;
+        }
+
+        function findShowAllLink(section) {
+          const links = Array.from(section.querySelectorAll('a[aria-label]'));
+          for (const a of links) {
+            const label = (a.getAttribute('aria-label') || '').toLowerCase();
+            if (label.includes('show all')) return a;
+          }
+          return null;
+        }
+
+        const section = findTargetSection();
+        if (!section) return { ok: false, step: 'find_section', reason: 'not_found' };
+
+        const link = findShowAllLink(section);
+        if (!link) return { ok: false, step: 'find_show_all', reason: 'not_found' };
+
+        link.click();
+
+        for (let i = 0; i < 30; i++) {
+          const dialog = document.querySelector('[role="dialog"], [aria-modal="true"]');
+          if (dialog) return { ok: true, step: 'dialog_open' };
+          await sleep(200);
+        }
+
+        return { ok: false, step: 'dialog_open', reason: 'timeout' };
+      }
+    });
+
+    const first = Array.isArray(result) ? result[0] : null;
+    const payload = first?.result;
+    if (payload?.ok) {
+      console.log('[CRM BG] Grow: Show all clicked, dialog open');
+    } else {
+      console.warn('[CRM BG] Grow: step failed:', payload);
+    }
+
     console.log('[CRM BG] Grow: scroll done');
   } catch (err) {
     console.warn('[CRM BG] Grow: scroll failed:', err?.message || err);
