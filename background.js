@@ -138,13 +138,98 @@ async function triggerGrowScroll(tabId) {
 
         link.click();
 
+        let dialog = null;
         for (let i = 0; i < 30; i++) {
-          const dialog = document.querySelector('[role="dialog"], [aria-modal="true"]');
-          if (dialog) return { ok: true, step: 'dialog_open' };
+          dialog = document.querySelector('dialog[data-testid="dialog"][aria-labelledby="dialog-header"]')
+            || document.querySelector('[role="dialog"][aria-labelledby="dialog-header"], [aria-modal="true"][aria-labelledby="dialog-header"]')
+            || document.querySelector('dialog[data-testid="dialog"]')
+            || document.querySelector('[role="dialog"], [aria-modal="true"]');
+          if (dialog) break;
           await sleep(200);
         }
 
-        return { ok: false, step: 'dialog_open', reason: 'timeout' };
+        if (!dialog) return { ok: false, step: 'dialog_open', reason: 'timeout' };
+
+        // STEP 7 — wait for contacts load
+        await sleep(5000);
+
+        // STEP 8 — scroll inside dialog (not body)
+        function scrollableDistance(el) {
+          if (!(el instanceof HTMLElement)) return 0;
+          return Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
+        }
+
+        function findDialogScrollContainer(d) {
+          const all = [d, ...Array.from(d.querySelectorAll('*'))];
+          let best = d;
+          let bestDist = scrollableDistance(d);
+
+          for (const el of all) {
+            if (!(el instanceof HTMLElement)) continue;
+            if (el.clientHeight < 200) continue;
+            const dist = scrollableDistance(el);
+            if (dist < 100) continue;
+
+            const style = window.getComputedStyle(el);
+            const ov = (style && style.overflowY) ? style.overflowY : '';
+            const isScrollable = ov === 'auto' || ov === 'scroll' || dist >= 300;
+            if (!isScrollable) continue;
+
+            if (dist > bestDist) {
+              best = el;
+              bestDist = dist;
+            }
+          }
+          return best;
+        }
+
+        function wheelScroll(el, deltaY) {
+          try {
+            const evt = new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true });
+            el.dispatchEvent(evt);
+          } catch {
+            // ignore
+          }
+        }
+
+        const scrollable = findDialogScrollContainer(dialog);
+        try {
+          scrollable.focus({ preventScroll: true });
+        } catch {
+          // ignore
+        }
+
+        const iterations = 10;
+        for (let i = 1; i <= iterations; i++) {
+          const before = scrollable.scrollTop;
+          try {
+            scrollable.scrollBy({ top: 600, behavior: 'smooth' });
+          } catch {
+            scrollable.scrollTop += 600;
+          }
+
+          // If LinkedIn ignores programmatic scroll, wheel often triggers lazy-load
+          await sleep(150);
+          if (scrollable.scrollTop === before) {
+            wheelScroll(scrollable, 800);
+            await sleep(50);
+            wheelScroll(scrollable, 800);
+            try { scrollable.scrollTop += 600; } catch { /* ignore */ }
+          }
+
+          await sleep(1000);
+        }
+
+        // STEP 9 — close dialog
+        const headerDialog = document.querySelector('dialog[data-testid="dialog"][aria-labelledby="dialog-header"], dialog[data-testid="dialog"], [role="dialog"][aria-labelledby="dialog-header"], [aria-modal="true"][aria-labelledby="dialog-header"]');
+        if (!headerDialog) return { ok: false, step: 'close_dialog', reason: 'dialog_not_found' };
+
+        const dismiss = headerDialog.querySelector('button[aria-label="Dismiss"]');
+        if (!dismiss) return { ok: false, step: 'close_dialog', reason: 'dismiss_not_found' };
+
+        dismiss.click();
+        await sleep(500);
+        return { ok: true, step: 'done' };
       }
     });
 
