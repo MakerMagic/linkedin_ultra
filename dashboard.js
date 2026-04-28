@@ -1527,6 +1527,62 @@
   var sentInvites = [];
   var readLog = [];
 
+  var leadsNameSet = new Set();
+
+  function normalizeNamePart(s) {
+    return String(s || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  function nameKey(firstName, lastName) {
+    var f = normalizeNamePart(firstName);
+    var l = normalizeNamePart(lastName);
+    return f + '|' + l;
+  }
+
+  function shortUrlLabel(url, maxLen) {
+    maxLen = maxLen || 9;
+    if (!url) return '';
+    try {
+      var u = new URL(url);
+      var s = (u.host || '') + (u.pathname || '');
+      s = s.replace(/^www\./i, '');
+      if (s.length <= maxLen) return s;
+      return s.slice(0, Math.max(0, maxLen - 1)) + '…';
+    } catch {
+      var raw = String(url);
+      if (raw.length <= maxLen) return raw;
+      return raw.slice(0, Math.max(0, maxLen - 1)) + '…';
+    }
+  }
+
+  function refreshLeadsNameSet(cb) {
+    chrome.storage.local.get(['crm_contacts'], function (data) {
+      var contacts = data.crm_contacts || [];
+      var next = new Set();
+      contacts.forEach(function (c) {
+        if (!c) return;
+
+        var first = c.firstName;
+        var last = c.lastName;
+
+        // Fallback: derive from fullName if needed
+        if ((!first || !last) && c.fullName) {
+          var parts = String(c.fullName).trim().split(/\s+/);
+          first = first || parts[0] || '';
+          last = last || (parts.length > 1 ? parts.slice(1).join(' ') : '');
+        }
+
+        if (!first && !last) return;
+        next.add(nameKey(first, last));
+      });
+      leadsNameSet = next;
+      if (typeof cb === 'function') cb();
+    });
+  }
+
   function loadSentInvites() {
     chrome.storage.local.get(['crm_sent_invites'], function (data) {
       sentInvites = data.crm_sent_invites || [];
@@ -1721,15 +1777,26 @@
     networkingList.hidden = false;
     
     networkingListContent.innerHTML = sentInvites.map(function (invite) {
+      var url = invite && invite.profileUrl ? String(invite.profileUrl) : '';
+      var urlLabel = url ? shortUrlLabel(url, 9) : '';
+      var desc = invite && (invite.description || invite.bio) ? String(invite.description || invite.bio) : '';
+
+      var status = 'Not Connected';
+      if (invite) {
+        var key = nameKey(invite.firstName, invite.lastName);
+        if (leadsNameSet.has(key)) status = 'Connected';
+      }
+
       return '<div class="networking-list__item">' +
         '<span>' + esc(invite.firstName || '') + '</span>' +
         '<span>' + esc(invite.lastName || '') + '</span>' +
         '<span>' +
-          (invite.profileUrl 
-            ? '<a href="' + esc(invite.profileUrl) + '" target="_blank" rel="noopener noreferrer" class="networking-list__url">' + esc(invite.profileUrl) + '</a>'
-            : '<span class="ctable__dash">вЂ”</span>') +
+          (url 
+            ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="networking-list__url" title="' + esc(url) + '">' + esc(urlLabel) + '</a>'
+            : 'Not Found') +
         '</span>' +
-        '<span>' + esc(invite.description || '') + '</span>' +
+        '<span>' + esc(desc || 'Not Found') + '</span>' +
+        '<span>' + esc(status) + '</span>' +
       '</div>';
     }).join('');
   }
@@ -1764,6 +1831,9 @@
   loadNetworkingKeywords();
   loadSentInvites();
   loadReadLog();
+  refreshLeadsNameSet(function () {
+    updateSentInvitesUI();
+  });
 
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area !== 'local') return;
@@ -1775,6 +1845,12 @@
     if (changes.crm_networking_read_log) {
       readLog = changes.crm_networking_read_log.newValue || [];
       updateReadLogUI();
+    }
+
+    if (changes.crm_contacts) {
+      refreshLeadsNameSet(function () {
+        updateSentInvitesUI();
+      });
     }
   });
 })();

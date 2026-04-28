@@ -344,7 +344,7 @@ html,body {
   .sync-actions { justify-content: center; }
 }
 
-/* ── ETA ── */
+/* ——— ETA ——— */
 
 .sync-eta {
   display: flex;
@@ -365,7 +365,7 @@ html,body {
 .sync-eta svg { flex-shrink: 0; opacity: 0.7; }
 .sync-eta[hidden] { display: none; }
 
-/* ── Confirmation Modal ── */
+/* ——— Confirmation Modal ——— */
 
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 100;
@@ -390,7 +390,7 @@ html,body {
 .modal-text  { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
 .modal-actions { display: flex; gap: 12px; padding-top: 8px; }
 
-/* ── Split Screen tip ── */
+/* ——— Split Screen tip ——— */
 
 .splitscreen-tip {
   display: flex;
@@ -465,7 +465,7 @@ html,body {
   pointer-events: none;
 }
 
-/* ── Help/Guide tab ── */
+/* ——— Help/Guide tab ——— */
 
 .guide-video-section { padding: 0; overflow: hidden; }
 .guide-video {
@@ -509,7 +509,7 @@ html,body {
 
 .help-faq-section { margin-top: 24px; }
 
-/* ── FAQ Accordion ── */
+/* ——— FAQ Accordion ——— */
 
 .faq { display: flex; flex-direction: column; gap: 4px; }
 
@@ -2065,6 +2065,7 @@ html,body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 20px;
   padding: 60px 24px;
   text-align: center;
@@ -2089,6 +2090,10 @@ html,body {
   line-height: 1.5;
 }
 
+.networking-empty[hidden] {
+  display: none;
+}
+
 /* List Layout - different from table */
 .networking-list {
   display: flex;
@@ -2096,12 +2101,16 @@ html,body {
   gap: 12px;
 }
 
+.networking-list[hidden] {
+  display: none;
+}
+
 .networking-list__header {
   display: grid;
   grid-template-columns: 1fr 1fr 2fr 1.5fr;
   gap: 16px;
   padding: 12px 20px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .07em;
@@ -2119,10 +2128,10 @@ html,body {
   display: grid;
   grid-template-columns: 1fr 1fr 2fr 1.5fr;
   gap: 16px;
-  padding: 16px 20px;
-  background: rgba(255,255,255,.03);
+  padding: 16px;
+  background: rgba(255,255,255,.02);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 14px;
   transition: all .15s ease;
 }
@@ -2208,5 +2217,27 @@ html,body {
   .networking-list__item span:nth-child(3),
   .networking-list__item span:nth-child(4) {
     display: none;
+  }
+  
+  #networkingList .networking-list__header,
+  #networkingList .networking-list__item {
+    grid-template-columns: 1fr 1fr 2fr 2fr 1fr;
+  }
+  
+  #networkingList .networking-list__header span:nth-child(5),
+  #networkingList .networking-list__item span:nth-child(5) {
+    display: none;
+  }
+}
+
+@media (min-width: 721px) {
+  #networkingList {
+    overflow-x: auto;
+  }
+
+  #networkingList .networking-list__header,
+  #networkingList .networking-list__item {
+    grid-template-columns: 1fr 1fr 2fr minmax(260px, 3fr) 1.2fr;
+    min-width: 860px;
   }
 }
