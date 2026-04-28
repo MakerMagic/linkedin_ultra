@@ -688,6 +688,14 @@
   var contactCardSaveNotes = document.getElementById('contactCardSaveNotes');
   var contactCardSavedIndicator = document.getElementById('contactCardSavedIndicator');
 
+  var networkingContactCardModal   = document.getElementById('networkingContactCardModal');
+  var networkingContactCardOverlay = document.getElementById('networkingContactCardOverlay');
+  var networkingContactCardClose   = document.getElementById('networkingContactCardClose');
+  var networkingContactCardAvatar  = document.getElementById('networkingContactCardAvatar');
+  var networkingContactCardName    = document.getElementById('networkingContactCardName');
+  var networkingContactCardUrl     = document.getElementById('networkingContactCardUrl');
+  var networkingContactCardDescription = document.getElementById('networkingContactCardDescription');
+
   var clearAllConfirmModal = document.getElementById('clearAllConfirmModal');
   var clearAllConfirmOverlay = document.getElementById('clearAllConfirmOverlay');
   var clearAllCancel     = document.getElementById('clearAllCancel');
@@ -1122,56 +1130,23 @@
     var url = invite.profileUrl ? String(invite.profileUrl) : '';
     var desc = invite && (invite.description || invite.bio) ? String(invite.description || invite.bio) : '';
 
-    if (contactCardAvatar) {
-      contactCardAvatar.textContent = initials.toUpperCase();
+    // Use separate Networking modal elements
+    if (networkingContactCardAvatar) {
+      networkingContactCardAvatar.textContent = initials.toUpperCase();
     }
-    if (contactCardName) {
-      contactCardName.textContent = fullName;
+    if (networkingContactCardName) {
+      networkingContactCardName.textContent = fullName;
     }
-
-    if (contactCardConnection) {
-      contactCardConnection.hidden = true;
+    if (networkingContactCardUrl) {
+      networkingContactCardUrl.href = url || '#';
+      networkingContactCardUrl.textContent = url || 'Not Found';
     }
-    
-    // Ensure all Leads-specific sections are hidden
-    var grid = contactCardJobTitle ? contactCardJobTitle.closest('.contact-card__grid') : null;
-    if (grid) grid.hidden = true;
-    var regionWrap = contactCardRegion ? contactCardRegion.closest('.contact-card__section') : null;
-    if (regionWrap) regionWrap.hidden = true;
-    var notesWrap = contactCardNotes ? contactCardNotes.closest('.contact-card__notes') : null;
-    if (notesWrap) notesWrap.hidden = true;
-
-    if (contactCardUrl) {
-      contactCardUrl.href = url || '#';
-      contactCardUrl.textContent = url || 'Not Found';
+    if (networkingContactCardDescription) {
+      networkingContactCardDescription.textContent = desc || 'Not Found';
     }
 
-    // Show only Networking-specific sections
-    if (contactCardDescriptionSection) {
-      contactCardDescriptionSection.hidden = false;
-    }
-    if (contactCardDescription) {
-      contactCardDescription.textContent = desc || 'Not Found';
-    }
-
-    if (contactCardJobTitle) contactCardJobTitle.textContent = '';
-    if (contactCardCompany) contactCardCompany.textContent = '';
-    if (contactCardSchool) contactCardSchool.textContent = '';
-    if (contactCardMajor) contactCardMajor.textContent = '';
-    if (contactCardRegion) contactCardRegion.textContent = '';
-
-    // Hide notes for networking detail view
-    var notesWrap = contactCardNotes ? contactCardNotes.closest('.contact-card__notes') : null;
-    if (notesWrap) notesWrap.hidden = true;
-
-    // Hide other sections not used in networking detail view
-    var grid = contactCardJobTitle ? contactCardJobTitle.closest('.contact-card__grid') : null;
-    if (grid) grid.hidden = true;
-    var regionWrap = contactCardRegion ? contactCardRegion.closest('.contact-card__section') : null;
-    if (regionWrap) regionWrap.hidden = true;
-
-    if (contactCardModal) {
-      contactCardModal.hidden = false;
+    if (networkingContactCardModal) {
+      networkingContactCardModal.hidden = false;
     }
   }
 
@@ -1187,6 +1162,24 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && contactCardModal && !contactCardModal.hidden) {
       closeContactCard();
+    }
+  });
+
+  // Networking modal close handlers
+  function closeNetworkingContactCard() {
+    if (networkingContactCardModal) {
+      networkingContactCardModal.hidden = true;
+    }
+  }
+  if (networkingContactCardClose) {
+    networkingContactCardClose.addEventListener('click', closeNetworkingContactCard);
+  }
+  if (networkingContactCardOverlay) {
+    networkingContactCardOverlay.addEventListener('click', closeNetworkingContactCard);
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && networkingContactCardModal && !networkingContactCardModal.hidden) {
+      closeNetworkingContactCard();
     }
   });
 
