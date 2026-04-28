@@ -2156,6 +2156,16 @@ html,body {
   text-decoration: underline;
 }
 
+.networking-list__name {
+  cursor: pointer;
+  transition: color .15s;
+  color: var(--text);
+}
+
+.networking-list__name:hover {
+  color: var(--accent);
+}
+
 /* Sync Hint */
 .networking-sync-hint {
   display: flex;

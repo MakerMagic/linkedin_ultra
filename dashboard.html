@@ -432,6 +432,10 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
                       <span class="contact-card__label">Profile URL</span>
                       <a class="contact-card__value contact-card__link" id="contactCardUrl" target="_blank" rel="noopener noreferrer"></a>
                     </div>
+                    <div class="contact-card__section" id="contactCardDescriptionSection">
+                      <span class="contact-card__label">Description</span>
+                      <span class="contact-card__value" id="contactCardDescription"></span>
+                    </div>
                     <div class="contact-card__grid">
                       <div class="contact-card__section">
                         <span class="contact-card__label">Job Title</span>
@@ -685,18 +689,29 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
                   </div>
                 </div>
 
-                <!-- Sent Invites List (hidden by default) -->
-                <div class="networking-list" id="networkingList" hidden>
-                  <div class="networking-list__header">
-                    <span>First Name</span>
-                    <span>Last Name</span>
-                    <span>LinkedIn URL</span>
-                    <span>Description</span>
-                    <span>Status</span>
-                  </div>
-                  <div class="networking-list__content" id="networkingListContent">
-                    <!-- Sent invite items will be inserted here -->
-                  </div>
+                <!-- Sent Invites Table (hidden by default) -->
+                <div class="table-wrap" id="networkingList" hidden>
+                  <table class="ctable" id="networkingTable" aria-label="Sent invites table">
+                    <colgroup>
+                      <col style="width: 13%">
+                      <col style="width: 13%">
+                      <col style="width: 14%">
+                      <col style="width: 34%">
+                      <col style="width: 13%">
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col">First Name</th>
+                        <th scope="col">Last Name</th>
+                        <th scope="col">LinkedIn URL</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="networkingListContent">
+                      <!-- Sent invite items will be inserted here -->
+                    </tbody>
+                  </table>
                 </div>
 
                 <!-- Sync Hint -->
@@ -733,14 +748,24 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
                   </div>
                 </div>
 
-                <div class="networking-list" id="readLogList" hidden>
-                  <div class="networking-list__header">
-                    <span>First Name</span>
-                    <span>Last Name</span>
-                    <span>LinkedIn URL</span>
-                    <span>Bio</span>
-                  </div>
-                  <div class="networking-list__content" id="readLogListContent"></div>
+                <div class="table-wrap" id="readLogList" hidden>
+                  <table class="ctable" id="readLogTable" aria-label="Read log table">
+                    <colgroup>
+                      <col style="width: 20%">
+                      <col style="width: 20%">
+                      <col style="width: 25%">
+                      <col style="width: 35%">
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col">First Name</th>
+                        <th scope="col">Last Name</th>
+                        <th scope="col">LinkedIn URL</th>
+                        <th scope="col">Bio</th>
+                      </tr>
+                    </thead>
+                    <tbody id="readLogListContent"></tbody>
+                  </table>
                 </div>
               </div>
             </section>

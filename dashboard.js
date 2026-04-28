@@ -682,6 +682,8 @@
   var contactCardSchool  = document.getElementById('contactCardSchool');
   var contactCardMajor   = document.getElementById('contactCardMajor');
   var contactCardRegion  = document.getElementById('contactCardRegion');
+  var contactCardDescriptionSection = document.getElementById('contactCardDescriptionSection');
+  var contactCardDescription = document.getElementById('contactCardDescription');
   var contactCardNotes   = document.getElementById('contactCardNotes');
   var contactCardSaveNotes = document.getElementById('contactCardSaveNotes');
   var contactCardSavedIndicator = document.getElementById('contactCardSavedIndicator');
@@ -1046,6 +1048,14 @@
     currentContactCardIndex = index;
     var c = tableContacts[index];
 
+    var notesWrap = contactCardNotes ? contactCardNotes.closest('.contact-card__notes') : null;
+    if (notesWrap) notesWrap.hidden = false;
+    var grid = contactCardJobTitle ? contactCardJobTitle.closest('.contact-card__grid') : null;
+    if (grid) grid.hidden = false;
+    var regionWrap = contactCardRegion ? contactCardRegion.closest('.contact-card__section') : null;
+    if (regionWrap) regionWrap.hidden = false;
+    if (contactCardConnection) contactCardConnection.hidden = false;
+
     var firstName = c.firstName || '';
     var lastName = c.lastName || '';
     var fullName = (firstName + ' ' + lastName).trim() || 'Unknown';
@@ -1069,6 +1079,13 @@
       contactCardUrl.textContent = c.profileUrl || 'вЂ”';
     }
 
+    if (contactCardDescriptionSection) {
+      contactCardDescriptionSection.hidden = true;
+    }
+    if (contactCardDescription) {
+      contactCardDescription.textContent = '';
+    }
+
     if (contactCardJobTitle) {
       contactCardJobTitle.textContent = c.jobTitle || '';
     }
@@ -1087,6 +1104,71 @@
     if (contactCardNotes) {
       contactCardNotes.value = c.notes || '';
     }
+
+    if (contactCardModal) {
+      contactCardModal.hidden = false;
+    }
+  }
+
+  function openNetworkingInviteCard(invite) {
+    if (!invite) return;
+
+    currentContactCardIndex = null;
+
+    var firstName = invite.firstName || '';
+    var lastName = invite.lastName || '';
+    var fullName = (String(firstName) + ' ' + String(lastName)).trim() || 'Unknown';
+    var initials = (String(firstName).trim()[0] || '') + (String(lastName).trim()[0] || '');
+    var url = invite.profileUrl ? String(invite.profileUrl) : '';
+    var desc = invite && (invite.description || invite.bio) ? String(invite.description || invite.bio) : '';
+
+    if (contactCardAvatar) {
+      contactCardAvatar.textContent = initials.toUpperCase();
+    }
+    if (contactCardName) {
+      contactCardName.textContent = fullName;
+    }
+
+    if (contactCardConnection) {
+      contactCardConnection.hidden = true;
+    }
+    
+    // Ensure all Leads-specific sections are hidden
+    var grid = contactCardJobTitle ? contactCardJobTitle.closest('.contact-card__grid') : null;
+    if (grid) grid.hidden = true;
+    var regionWrap = contactCardRegion ? contactCardRegion.closest('.contact-card__section') : null;
+    if (regionWrap) regionWrap.hidden = true;
+    var notesWrap = contactCardNotes ? contactCardNotes.closest('.contact-card__notes') : null;
+    if (notesWrap) notesWrap.hidden = true;
+
+    if (contactCardUrl) {
+      contactCardUrl.href = url || '#';
+      contactCardUrl.textContent = url || 'Not Found';
+    }
+
+    // Show only Networking-specific sections
+    if (contactCardDescriptionSection) {
+      contactCardDescriptionSection.hidden = false;
+    }
+    if (contactCardDescription) {
+      contactCardDescription.textContent = desc || 'Not Found';
+    }
+
+    if (contactCardJobTitle) contactCardJobTitle.textContent = '';
+    if (contactCardCompany) contactCardCompany.textContent = '';
+    if (contactCardSchool) contactCardSchool.textContent = '';
+    if (contactCardMajor) contactCardMajor.textContent = '';
+    if (contactCardRegion) contactCardRegion.textContent = '';
+
+    // Hide notes for networking detail view
+    var notesWrap = contactCardNotes ? contactCardNotes.closest('.contact-card__notes') : null;
+    if (notesWrap) notesWrap.hidden = true;
+
+    // Hide other sections not used in networking detail view
+    var grid = contactCardJobTitle ? contactCardJobTitle.closest('.contact-card__grid') : null;
+    if (grid) grid.hidden = true;
+    var regionWrap = contactCardRegion ? contactCardRegion.closest('.contact-card__section') : null;
+    if (regionWrap) regionWrap.hidden = true;
 
     if (contactCardModal) {
       contactCardModal.hidden = false;
@@ -1324,6 +1406,14 @@
     if (contactCardModal) {
       contactCardModal.hidden = true;
     }
+
+    // Restore hidden sections for Leads view
+    var notesWrap = contactCardNotes ? contactCardNotes.closest('.contact-card__notes') : null;
+    if (notesWrap) notesWrap.hidden = false;
+    var grid = contactCardJobTitle ? contactCardJobTitle.closest('.contact-card__grid') : null;
+    if (grid) grid.hidden = false;
+    var regionWrap = contactCardRegion ? contactCardRegion.closest('.contact-card__section') : null;
+    if (regionWrap) regionWrap.hidden = false;
   }
 
   function saveContactNotes() {
@@ -1776,7 +1866,7 @@
     networkingEmptyState.hidden = true;
     networkingList.hidden = false;
     
-    networkingListContent.innerHTML = sentInvites.map(function (invite) {
+    networkingListContent.innerHTML = sentInvites.map(function (invite, idx) {
       var url = invite && invite.profileUrl ? String(invite.profileUrl) : '';
       var urlLabel = url ? shortUrlLabel(url, 9) : '';
       var desc = invite && (invite.description || invite.bio) ? String(invite.description || invite.bio) : '';
@@ -1787,18 +1877,41 @@
         if (leadsNameSet.has(key)) status = 'Connected';
       }
 
-      return '<div class="networking-list__item">' +
-        '<span>' + esc(invite.firstName || '') + '</span>' +
-        '<span>' + esc(invite.lastName || '') + '</span>' +
-        '<span>' +
-          (url 
-            ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="networking-list__url" title="' + esc(url) + '">' + esc(urlLabel) + '</a>'
-            : 'Not Found') +
-        '</span>' +
-        '<span>' + esc(desc || 'Not Found') + '</span>' +
-        '<span>' + esc(status) + '</span>' +
-      '</div>';
+      var urlCell;
+      if (url) {
+        urlCell = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
+          '<span>' + esc(urlLabel) + '</span>' +
+          '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
+            '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
+          '</svg>' +
+        '</a>';
+      } else {
+        urlCell = '<span class="ctable__dash">Not Found</span>';
+      }
+
+      var firstNameCell = invite.firstName
+        ? '<span class="ctable__name" data-invite-index="' + idx + '">' + esc(invite.firstName) + '</span>'
+        : '<span class="ctable__dash">Not Found</span>';
+      var lastNameCell = invite.lastName
+        ? '<span class="ctable__name" data-invite-index="' + idx + '">' + esc(invite.lastName) + '</span>'
+        : '<span class="ctable__dash">Not Found</span>';
+
+      return '<tr>' +
+        '<td>' + firstNameCell + '</td>' +
+        '<td>' + lastNameCell + '</td>' +
+        '<td>' + urlCell + '</td>' +
+        '<td>' + esc(desc || 'Not Found') + '</td>' +
+        '<td>' + esc(status) + '</td>' +
+      '</tr>';
     }).join('');
+
+    networkingListContent.querySelectorAll('.ctable__name[data-invite-index]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var i = parseInt(el.getAttribute('data-invite-index'), 10);
+        if (isNaN(i) || !sentInvites[i]) return;
+        openNetworkingInviteCard(sentInvites[i]);
+      });
+    });
   }
 
   function updateReadLogUI() {
@@ -1815,16 +1928,27 @@
     readLogList.hidden = false;
 
     readLogListContent.innerHTML = readLog.map(function (item) {
-      return '<div class="networking-list__item">' +
-        '<span>' + esc(item.firstName || '') + '</span>' +
-        '<span>' + esc(item.lastName || '') + '</span>' +
-        '<span>' +
-          (item.profileUrl
-            ? '<a href="' + esc(item.profileUrl) + '" target="_blank" rel="noopener noreferrer" class="networking-list__url">' + esc(item.profileUrl) + '</a>'
-            : '<span class="ctable__dash">вЂ”</span>') +
-        '</span>' +
-        '<span>' + esc(item.bio || item.description || '') + '</span>' +
-      '</div>';
+      var url = item && item.profileUrl ? String(item.profileUrl) : '';
+      var urlCell;
+      if (url) {
+        var displayUrl = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + 'вЂ¦';
+        urlCell = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
+          '<span>' + esc(displayUrl) + '</span>' +
+          '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
+            '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
+          '</svg>' +
+        '</a>';
+      } else {
+        urlCell = '<span class="ctable__dash">вЂ”</span>';
+      }
+
+      return '<tr>' +
+        '<td>' + (item.firstName ? esc(item.firstName) : '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (item.lastName ? esc(item.lastName) : '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + urlCell + '</td>' +
+        '<td>' + esc(item.bio || item.description || '') + '</td>' +
+      '</tr>';
     }).join('');
   }
 
