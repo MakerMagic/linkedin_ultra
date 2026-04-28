@@ -55,6 +55,10 @@ async function triggerGrowScroll(tabId) {
     console.log('[CRM BG] Grow: waiting 2000ms before scroll');
     await delay(2000);
 
+    async function getLocalStorage(keys) {
+      return new Promise(resolve => chrome.storage.local.get(keys, resolve));
+    }
+
     let tab;
     try { tab = await chrome.tabs.get(tabId); }
     catch { return; }
@@ -99,12 +103,51 @@ async function triggerGrowScroll(tabId) {
       }
     });
 
+    const snap = await getLocalStorage(['crm_networking_keywords', 'crm_sent_invites', 'crm_networking_read_log']);
+    const keywords = Array.isArray(snap.crm_networking_keywords) ? snap.crm_networking_keywords : [];
+    const sentInvites = Array.isArray(snap.crm_sent_invites) ? snap.crm_sent_invites : [];
+    const readLog = Array.isArray(snap.crm_networking_read_log) ? snap.crm_networking_read_log : [];
+    const sentUrls = sentInvites.map(x => x && (x.profileUrl || x.url || x.href)).filter(Boolean);
+    const readUrls = readLog.map(x => x && (x.profileUrl || x.url || x.href)).filter(Boolean);
+
     const result = await chrome.scripting.executeScript({
       target: { tabId },
-      func: async () => {
+      func: async (netKeywords, existingSentUrls, existingReadUrls) => {
+
         function sleep(ms) {
           return new Promise(r => setTimeout(r, ms));
         }
+
+        function safeText(s) {
+          return (s || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function normalizeUrl(href) {
+          if (!href) return '';
+          try {
+            if (href.startsWith('http')) return href;
+            if (href.startsWith('/')) return new URL(href, location.origin).toString();
+            return new URL(href, location.origin).toString();
+          } catch {
+            return '';
+          }
+        }
+
+        function splitName(fullName) {
+          const t = safeText(fullName);
+          if (!t) return { firstName: '', lastName: '' };
+          const parts = t.split(/\s+/);
+          if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+          return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+        }
+
+        const keywords = Array.isArray(netKeywords) ? netKeywords.map(k => safeText(String(k)).toLowerCase()).filter(Boolean) : [];
+        const sentSet = new Set(Array.isArray(existingSentUrls) ? existingSentUrls.map(u => String(u)) : []);
+        const readSet = new Set(Array.isArray(existingReadUrls) ? existingReadUrls.map(u => String(u)) : []);
+        const sessionInvited = new Set();
+        const newInvites = [];
+        const readEntries = [];
+        const sessionRead = new Set();
 
         function findTargetSection() {
           const sections = Array.from(document.querySelectorAll('section[componentkey], section[componentKey]'));
@@ -130,44 +173,15 @@ async function triggerGrowScroll(tabId) {
           return null;
         }
 
-        const section = findTargetSection();
-        if (!section) return { ok: false, step: 'find_section', reason: 'not_found' };
-
-        const link = findShowAllLink(section);
-        if (!link) return { ok: false, step: 'find_show_all', reason: 'not_found' };
-
-        link.click();
-
-        let dialog = null;
-        for (let i = 0; i < 30; i++) {
-          dialog = document.querySelector('dialog[data-testid="dialog"][aria-labelledby="dialog-header"]')
-            || document.querySelector('[role="dialog"][aria-labelledby="dialog-header"], [aria-modal="true"][aria-labelledby="dialog-header"]')
-            || document.querySelector('dialog[data-testid="dialog"]')
-            || document.querySelector('[role="dialog"], [aria-modal="true"]');
-          if (dialog) break;
-          await sleep(200);
-        }
-
-        if (!dialog) return { ok: false, step: 'dialog_open', reason: 'timeout' };
-
-        // STEP 7 — wait for contacts load
-        await sleep(5000);
-
-        // STEP 8 — scroll inside dialog (not body)
-        function scrollableDistance(el) {
-          if (!(el instanceof HTMLElement)) return 0;
-          return Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
-        }
-
         function findDialogScrollContainer(d) {
           const all = [d, ...Array.from(d.querySelectorAll('*'))];
           let best = d;
-          let bestDist = scrollableDistance(d);
+          let bestDist = 0;
 
           for (const el of all) {
             if (!(el instanceof HTMLElement)) continue;
             if (el.clientHeight < 200) continue;
-            const dist = scrollableDistance(el);
+            const dist = Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
             if (dist < 100) continue;
 
             const style = window.getComputedStyle(el);
@@ -192,6 +206,208 @@ async function triggerGrowScroll(tabId) {
           }
         }
 
+        function collectProfileAnchors(d) {
+          // LinkedIn часто использует относительные ссылки вида "/in/..."
+          const all = Array.from(d.querySelectorAll('a[href*="/in/"], a[href*="linkedin.com/in"]'));
+          return all;
+        }
+
+        function extractNameAndBioFromAnchor(a) {
+          try {
+            // 1) Name (максимально устойчиво к изменениям DOM)
+            let name = '';
+
+            // Часто имя лежит в span[aria-hidden="true"] внутри ссылки
+            const ariaHiddenSpans = Array.from(a.querySelectorAll('span[aria-hidden="true"]'));
+            for (const sp of ariaHiddenSpans) {
+              const t = safeText(sp.textContent);
+              if (t && t.length >= 2) {
+                name = t;
+                break;
+              }
+            }
+
+            // Фоллбек: первый осмысленный текстовый span
+            if (!name) {
+              const spans = Array.from(a.querySelectorAll('span'));
+              for (const sp of spans) {
+                const t = safeText(sp.textContent);
+                if (t && t.length >= 2) {
+                  name = t;
+                  break;
+                }
+              }
+            }
+
+            // Фоллбек: первый p
+            if (!name) {
+              const p = a.querySelector('p');
+              const t = safeText(p ? p.textContent : '');
+              if (t && t.length >= 2) name = t;
+            }
+
+            // Фоллбек: весь текст ссылки (последний шанс)
+            if (!name) {
+              const t = safeText(a.textContent);
+              if (t && t.length >= 2) name = t;
+            }
+
+            name = safeText((name || '').split(',')[0]);
+            if (!name) return null;
+
+            // 2) Bio (вторая строка карточки, либо ближайший p/second span)
+            let bio = '';
+
+            // Попытка: взять самый “длинный” p внутри anchor, который не равен name
+            const ps = Array.from(a.querySelectorAll('p'));
+            let best = '';
+            for (const p of ps) {
+              const t = safeText(p.textContent);
+              if (!t) continue;
+              if (t === name) continue;
+              if (t.length > best.length) best = t;
+            }
+            if (best) bio = best;
+
+            // Фоллбек: второй осмысленный span
+            if (!bio) {
+              const spans = Array.from(a.querySelectorAll('span'));
+              let seenNameLike = false;
+              for (const sp of spans) {
+                const t = safeText(sp.textContent);
+                if (!t) continue;
+                if (!seenNameLike && (t === name || t.includes(name))) {
+                  seenNameLike = true;
+                  continue;
+                }
+                if (seenNameLike && t !== name) {
+                  bio = t;
+                  break;
+                }
+              }
+            }
+
+            return { name, bio };
+          } catch {
+            return null;
+          }
+        }
+
+        function matchesKeywords(bio) {
+          if (!keywords.length) return true;
+          const b = safeText(bio).toLowerCase();
+          if (!b) return false;
+          for (const kw of keywords) {
+            if (kw && b.includes(kw)) return true;
+          }
+          return false;
+        }
+
+        function findInviteButtonForAnchor(a) {
+          try {
+            const next = a.nextElementSibling;
+            if (!next || next.tagName !== 'DIV') return null;
+            const divs = Array.from(next.children).filter(ch => ch && ch.tagName === 'DIV');
+            const maybe = divs[1] || next;
+            const btn = maybe.querySelector('button[aria-label]');
+            if (!btn) return null;
+            const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+            if (!label.includes('invite')) return null;
+            return btn;
+          } catch {
+            return null;
+          }
+        }
+
+        function rememberRead(href, name, bio, matched, invited) {
+          if (!href) return;
+          if (readSet.has(href)) return;
+          if (sessionRead.has(href)) return;
+          sessionRead.add(href);
+          const n = splitName(name);
+          readEntries.push({
+            firstName: n.firstName,
+            lastName: n.lastName,
+            profileUrl: href,
+            bio: bio,
+            matched: !!matched,
+            invited: !!invited
+          });
+        }
+
+        async function processDialogProfiles(d) {
+          const anchors = collectProfileAnchors(d);
+          for (const a of anchors) {
+            const href = normalizeUrl(a.getAttribute('href'));
+            if (!href) continue;
+
+            const parsed = extractNameAndBioFromAnchor(a);
+            if (!parsed) continue;
+
+            const matched = matchesKeywords(parsed.bio);
+
+            if (sentSet.has(href)) {
+              rememberRead(href, parsed.name, parsed.bio, matched, true);
+              continue;
+            }
+            if (sessionInvited.has(href)) {
+              rememberRead(href, parsed.name, parsed.bio, matched, true);
+              continue;
+            }
+
+            if (!matched) {
+              rememberRead(href, parsed.name, parsed.bio, false, false);
+              continue;
+            }
+
+            const btn = findInviteButtonForAnchor(a);
+            if (!btn) {
+              rememberRead(href, parsed.name, parsed.bio, true, false);
+              continue;
+            }
+
+            try {
+              btn.click();
+              sessionInvited.add(href);
+              const n = splitName(parsed.name);
+              newInvites.push({
+                firstName: n.firstName,
+                lastName: n.lastName,
+                profileUrl: href,
+                bio: parsed.bio
+              });
+              rememberRead(href, parsed.name, parsed.bio, true, true);
+              await sleep(200);
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        const section = findTargetSection();
+        if (!section) return { ok: false, step: 'find_section', reason: 'not_found', newInvites, readEntries };
+
+        const link = findShowAllLink(section);
+        if (!link) return { ok: false, step: 'find_show_all', reason: 'not_found', newInvites, readEntries };
+
+        link.click();
+
+        let dialog = null;
+        for (let i = 0; i < 30; i++) {
+          dialog = document.querySelector('dialog[data-testid="dialog"][aria-labelledby="dialog-header"]')
+            || document.querySelector('[role="dialog"][aria-labelledby="dialog-header"], [aria-modal="true"][aria-labelledby="dialog-header"]')
+            || document.querySelector('dialog[data-testid="dialog"]')
+            || document.querySelector('[role="dialog"], [aria-modal="true"]');
+          if (dialog) break;
+          await sleep(200);
+        }
+
+        if (!dialog) return { ok: false, step: 'dialog_open', reason: 'timeout', newInvites, readEntries };
+
+        // STEP 7 — wait for contacts load
+        await sleep(5000);
+
+        // STEP 8 — scroll inside dialog (not body)
         const scrollable = findDialogScrollContainer(dialog);
         try {
           scrollable.focus({ preventScroll: true });
@@ -218,19 +434,24 @@ async function triggerGrowScroll(tabId) {
           }
 
           await sleep(1000);
+
+          // Process visible profiles after each scroll step (do not interrupt scrolling loop)
+          await processDialogProfiles(dialog);
         }
 
         // STEP 9 — close dialog
         const headerDialog = document.querySelector('dialog[data-testid="dialog"][aria-labelledby="dialog-header"], dialog[data-testid="dialog"], [role="dialog"][aria-labelledby="dialog-header"], [aria-modal="true"][aria-labelledby="dialog-header"]');
-        if (!headerDialog) return { ok: false, step: 'close_dialog', reason: 'dialog_not_found' };
+        if (!headerDialog) return { ok: false, step: 'close_dialog', reason: 'dialog_not_found', newInvites, readEntries };
 
         const dismiss = headerDialog.querySelector('button[aria-label="Dismiss"]');
-        if (!dismiss) return { ok: false, step: 'close_dialog', reason: 'dismiss_not_found' };
+        if (!dismiss) return { ok: false, step: 'close_dialog', reason: 'dismiss_not_found', newInvites, readEntries };
 
         dismiss.click();
         await sleep(500);
-        return { ok: true, step: 'done' };
+        return { ok: true, step: 'done', newInvites, readEntries };
       }
+      ,
+      args: [keywords, sentUrls, readUrls]
     });
 
     const first = Array.isArray(result) ? result[0] : null;
@@ -239,6 +460,33 @@ async function triggerGrowScroll(tabId) {
       console.log('[CRM BG] Grow: Show all clicked, dialog open');
     } else {
       console.warn('[CRM BG] Grow: step failed:', payload);
+    }
+
+    if (Array.isArray(payload?.readEntries) && payload.readEntries.length) {
+      const merged = [...readLog];
+      const existing = new Set(merged.map(x => x && (x.profileUrl || x.url || x.href)).filter(Boolean));
+      for (const item of payload.readEntries) {
+        const u = item && (item.profileUrl || item.url || item.href);
+        if (!u || existing.has(u)) continue;
+        existing.add(u);
+        merged.push(item);
+      }
+      const capped = merged.length > 2000 ? merged.slice(merged.length - 2000) : merged;
+      await chrome.storage.local.set({ crm_networking_read_log: capped });
+      console.log('[CRM BG] Grow: saved read log items:', payload.readEntries.length);
+    }
+
+    if (payload?.ok && Array.isArray(payload.newInvites) && payload.newInvites.length) {
+      const merged = [...sentInvites];
+      const existing = new Set(merged.map(x => x && (x.profileUrl || x.url || x.href)).filter(Boolean));
+      for (const inv of payload.newInvites) {
+        const u = inv && (inv.profileUrl || inv.url || inv.href);
+        if (!u || existing.has(u)) continue;
+        existing.add(u);
+        merged.push(inv);
+      }
+      await chrome.storage.local.set({ crm_sent_invites: merged });
+      console.log('[CRM BG] Grow: saved new invites:', payload.newInvites.length);
     }
 
     console.log('[CRM BG] Grow: scroll done');

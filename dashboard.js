@@ -1517,14 +1517,27 @@
   var networkingListContent = document.getElementById('networkingListContent');
   var networkingEmptyState = document.getElementById('networkingEmptyState');
   var sentInvitesBadge = document.getElementById('sentInvitesBadge');
+  var readLogBadge = document.getElementById('readLogBadge');
+
+  var readLogList = document.getElementById('readLogList');
+  var readLogListContent = document.getElementById('readLogListContent');
+  var readLogEmptyState = document.getElementById('readLogEmptyState');
 
   var selectedKeywords = [];
   var sentInvites = [];
+  var readLog = [];
 
   function loadSentInvites() {
     chrome.storage.local.get(['crm_sent_invites'], function (data) {
       sentInvites = data.crm_sent_invites || [];
       updateSentInvitesUI();
+    });
+  }
+
+  function loadReadLog() {
+    chrome.storage.local.get(['crm_networking_read_log'], function (data) {
+      readLog = data.crm_networking_read_log || [];
+      updateReadLogUI();
     });
   }
 
@@ -1540,6 +1553,17 @@
       sentInvitesBadge.hidden = false;
     } else {
       sentInvitesBadge.hidden = true;
+    }
+  }
+
+  function updateReadLogBadge() {
+    if (!readLogBadge) return;
+    var count = readLog.length;
+    if (count > 0) {
+      readLogBadge.textContent = count > 99 ? '99+' : String(count);
+      readLogBadge.hidden = false;
+    } else {
+      readLogBadge.hidden = true;
     }
   }
 
@@ -1669,6 +1693,10 @@
     if (tabId === 'sent') {
       loadSentInvites();
     }
+
+    if (tabId === 'read') {
+      loadReadLog();
+    }
   }
 
   document.querySelectorAll('.networking-tab').forEach(function (btn) {
@@ -1706,14 +1734,47 @@
     }).join('');
   }
 
+  function updateReadLogUI() {
+    updateReadLogBadge();
+    if (!readLogList || !readLogListContent || !readLogEmptyState) return;
+
+    if (readLog.length === 0) {
+      readLogList.hidden = true;
+      readLogEmptyState.hidden = false;
+      return;
+    }
+
+    readLogEmptyState.hidden = true;
+    readLogList.hidden = false;
+
+    readLogListContent.innerHTML = readLog.map(function (item) {
+      return '<div class="networking-list__item">' +
+        '<span>' + esc(item.firstName || '') + '</span>' +
+        '<span>' + esc(item.lastName || '') + '</span>' +
+        '<span>' +
+          (item.profileUrl
+            ? '<a href="' + esc(item.profileUrl) + '" target="_blank" rel="noopener noreferrer" class="networking-list__url">' + esc(item.profileUrl) + '</a>'
+            : '<span class="ctable__dash">вЂ”</span>') +
+        '</span>' +
+        '<span>' + esc(item.bio || item.description || '') + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
   loadNetworkingKeywords();
   loadSentInvites();
+  loadReadLog();
 
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area !== 'local') return;
     if (changes.crm_sent_invites) {
       sentInvites = changes.crm_sent_invites.newValue || [];
       updateSentInvitesUI();
+    }
+
+    if (changes.crm_networking_read_log) {
+      readLog = changes.crm_networking_read_log.newValue || [];
+      updateReadLogUI();
     }
   });
 })();

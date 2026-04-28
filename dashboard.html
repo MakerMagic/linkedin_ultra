@@ -569,6 +569,23 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
               Sent Invites
               <span class="networking-tab__badge" id="sentInvitesBadge" hidden>0</span>
             </button>
+            <button
+              type="button"
+              class="networking-tab"
+              data-networking-tab="read"
+              role="tab"
+              aria-selected="false"
+              aria-controls="networking-panel-read"
+              id="networking-tab-read"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12" y2="16"/>
+              </svg>
+              Read Log
+              <span class="networking-tab__badge" id="readLogBadge" hidden>0</span>
+            </button>
           </div>
 
           <!-- ── Sub-panel: Start Networking ── -->
@@ -691,6 +708,42 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
               </div>
             </section>
           </div><!-- /networking-panel-sent -->
+
+          <!-- ── Sub-panel: Read Log (debug) ── -->
+          <div
+            class="networking-subpanel"
+            data-networking-panel="read"
+            id="networking-panel-read"
+            role="tabpanel"
+            aria-labelledby="networking-tab-read"
+            hidden
+          >
+            <section class="glass card networking-card" aria-labelledby="networking-read-title">
+              <div class="networking-sent-layout">
+                <div class="networking-empty" id="readLogEmptyState">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 8v4"/>
+                    <path d="M12 16h.01"/>
+                  </svg>
+                  <div class="networking-empty__content">
+                    <p class="networking-empty__title">No read log yet</p>
+                    <p class="networking-empty__text">Start networking to capture what the extension reads from the dialog.</p>
+                  </div>
+                </div>
+
+                <div class="networking-list" id="readLogList" hidden>
+                  <div class="networking-list__header">
+                    <span>First Name</span>
+                    <span>Last Name</span>
+                    <span>LinkedIn URL</span>
+                    <span>Bio</span>
+                  </div>
+                  <div class="networking-list__content" id="readLogListContent"></div>
+                </div>
+              </div>
+            </section>
+          </div><!-- /networking-panel-read -->
         </div><!-- /panel-networking -->
 
         <!-- ══════════════════════════════════════════════
