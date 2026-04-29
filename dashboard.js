@@ -688,13 +688,14 @@
   var contactCardSaveNotes = document.getElementById('contactCardSaveNotes');
   var contactCardSavedIndicator = document.getElementById('contactCardSavedIndicator');
 
-  var networkingContactCardModal   = document.getElementById('networkingContactCardModal');
-  var networkingContactCardOverlay = document.getElementById('networkingContactCardOverlay');
-  var networkingContactCardClose   = document.getElementById('networkingContactCardClose');
-  var networkingContactCardAvatar  = document.getElementById('networkingContactCardAvatar');
-  var networkingContactCardName    = document.getElementById('networkingContactCardName');
-  var networkingContactCardUrl     = document.getElementById('networkingContactCardUrl');
-  var networkingContactCardDescription = document.getElementById('networkingContactCardDescription');
+  // ── Networking Contact Modal (отдельный от Leads) ─────────────────────
+  var netContactModal   = document.getElementById('netContactModal');
+  var netContactOverlay = document.getElementById('netContactOverlay');
+  var netContactClose   = document.getElementById('netContactClose');
+  var netContactAvatar  = document.getElementById('netContactAvatar');
+  var netContactName    = document.getElementById('netContactName');
+  var netContactUrl     = document.getElementById('netContactUrl');
+  var netContactBio     = document.getElementById('netContactBio');
 
   var clearAllConfirmModal = document.getElementById('clearAllConfirmModal');
   var clearAllConfirmOverlay = document.getElementById('clearAllConfirmOverlay');
@@ -1119,36 +1120,40 @@
   }
 
   function openNetworkingInviteCard(invite) {
-    if (!invite) return;
-
-    currentContactCardIndex = null;
+    if (!invite || !netContactModal) return;
 
     var firstName = invite.firstName || '';
-    var lastName = invite.lastName || '';
-    var fullName = (String(firstName) + ' ' + String(lastName)).trim() || 'Unknown';
-    var initials = (String(firstName).trim()[0] || '') + (String(lastName).trim()[0] || '');
-    var url = invite.profileUrl ? String(invite.profileUrl) : '';
-    var desc = invite && (invite.description || invite.bio) ? String(invite.description || invite.bio) : '';
+    var lastName  = invite.lastName  || '';
+    var fullName  = (String(firstName) + ' ' + String(lastName)).trim() || 'Unknown';
+    var initials  = (String(firstName).trim()[0] || '') + (String(lastName).trim()[0] || '');
+    var url       = invite.profileUrl ? String(invite.profileUrl) : '';
+    var bio       = invite.description || invite.bio || '';
 
-    // Use separate Networking modal elements
-    if (networkingContactCardAvatar) {
-      networkingContactCardAvatar.textContent = initials.toUpperCase();
-    }
-    if (networkingContactCardName) {
-      networkingContactCardName.textContent = fullName;
-    }
-    if (networkingContactCardUrl) {
-      networkingContactCardUrl.href = url || '#';
-      networkingContactCardUrl.textContent = url || 'Not Found';
-    }
-    if (networkingContactCardDescription) {
-      networkingContactCardDescription.textContent = desc || 'Not Found';
+    if (netContactAvatar) netContactAvatar.textContent = initials.toUpperCase();
+    if (netContactName)   netContactName.textContent   = fullName;
+
+    if (netContactUrl) {
+      netContactUrl.href        = url || '#';
+      netContactUrl.textContent = url || '—';
     }
 
-    if (networkingContactCardModal) {
-      networkingContactCardModal.hidden = false;
-    }
+    if (netContactBio) netContactBio.textContent = bio || '—';
+
+    netContactModal.hidden = false;
   }
+
+  function closeNetContactModal() {
+    if (netContactModal) netContactModal.hidden = true;
+  }
+
+  if (netContactClose)   netContactClose.addEventListener('click', closeNetContactModal);
+  if (netContactOverlay) netContactOverlay.addEventListener('click', closeNetContactModal);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && netContactModal && !netContactModal.hidden) {
+      closeNetContactModal();
+    }
+  });
 
   if (contactCardClose) {
     contactCardClose.addEventListener('click', closeContactCard);
@@ -1162,24 +1167,6 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && contactCardModal && !contactCardModal.hidden) {
       closeContactCard();
-    }
-  });
-
-  // Networking modal close handlers
-  function closeNetworkingContactCard() {
-    if (networkingContactCardModal) {
-      networkingContactCardModal.hidden = true;
-    }
-  }
-  if (networkingContactCardClose) {
-    networkingContactCardClose.addEventListener('click', closeNetworkingContactCard);
-  }
-  if (networkingContactCardOverlay) {
-    networkingContactCardOverlay.addEventListener('click', closeNetworkingContactCard);
-  }
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && networkingContactCardModal && !networkingContactCardModal.hidden) {
-      closeNetworkingContactCard();
     }
   });
 

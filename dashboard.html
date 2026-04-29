@@ -470,33 +470,6 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
                 </div>
               </div>
 
-              <!-- Networking Contact Card Modal (separate modal for Networking tab) -->
-              <div class="contact-card-modal" id="networkingContactCardModal" hidden>
-                <div class="contact-card-overlay" id="networkingContactCardOverlay"></div>
-                <div class="contact-card" id="networkingContactCard">
-                  <button type="button" class="contact-card__close" id="networkingContactCardClose" aria-label="Close">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
-                  <div class="contact-card__header">
-                    <div class="contact-card__avatar" id="networkingContactCardAvatar"></div>
-                    <div class="contact-card__title">
-                      <h3 class="contact-card__name" id="networkingContactCardName"></h3>
-                    </div>
-                  </div>
-                  <div class="contact-card__body">
-                    <div class="contact-card__section">
-                      <span class="contact-card__label">Profile URL</span>
-                      <a class="contact-card__value contact-card__link" id="networkingContactCardUrl" target="_blank" rel="noopener noreferrer"></a>
-                    </div>
-                    <div class="contact-card__section">
-                      <span class="contact-card__label">Description</span>
-                      <span class="contact-card__value" id="networkingContactCardDescription"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </section>
           </div><!-- /leads-panel-data -->
 
@@ -888,6 +861,37 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
         <div class="modal-actions">
           <button type="button" id="btnModalConfirm" class="btn btn--primary">Yes, start over</button>
           <button type="button" id="btnModalCancel"  class="btn btn--ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         Networking Contact Modal — отдельный modal,
+         не связанный с Leads. Размещён в body.
+    ═══════════════════════════════════════════════ -->
+    <div class="contact-card-modal" id="netContactModal" hidden>
+      <div class="contact-card-overlay" id="netContactOverlay"></div>
+      <div class="contact-card" id="netContactCard">
+        <button type="button" class="contact-card__close" id="netContactClose" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <div class="contact-card__header">
+          <div class="contact-card__avatar" id="netContactAvatar"></div>
+          <div class="contact-card__title">
+            <h3 class="contact-card__name" id="netContactName"></h3>
+          </div>
+        </div>
+        <div class="contact-card__body">
+          <div class="contact-card__section">
+            <span class="contact-card__label">Profile URL</span>
+            <a class="contact-card__value contact-card__link" id="netContactUrl" target="_blank" rel="noopener noreferrer"></a>
+          </div>
+          <div class="contact-card__section">
+            <span class="contact-card__label">Description / Bio</span>
+            <span class="contact-card__value" id="netContactBio"></span>
+          </div>
         </div>
       </div>
     </div>
