@@ -1593,6 +1593,76 @@
   var readLogListContent = document.getElementById('readLogListContent');
   var readLogEmptyState = document.getElementById('readLogEmptyState');
 
+  function ensureClearUiForPanel(opts) {
+    var panel = document.getElementById(opts.panelId);
+    if (!panel) return;
+
+    var section = panel.querySelector('section.networking-card');
+    if (!section) return;
+
+    if (!section.querySelector('#' + opts.buttonId)) {
+      var layout = section.querySelector('.networking-sent-layout');
+      if (layout) {
+        var header = document.createElement('div');
+        header.className = 'data-card__header';
+        header.innerHTML =
+          '<h2 id="' + opts.titleId + '" class="card__title" style="margin-bottom:0">' + esc(opts.titleText) + '</h2>' +
+          '<button type="button" id="' + opts.buttonId + '" class="btn btn--micro btn--danger" style="margin-left: auto; font-size: 11px; padding: 4px 10px;">Clear All Data</button>';
+        section.insertBefore(header, layout);
+      }
+    }
+
+    if (!section.querySelector('#' + opts.modalId)) {
+      var modal = document.createElement('div');
+      modal.className = 'confirm-modal';
+      modal.id = opts.modalId;
+      modal.hidden = true;
+      modal.innerHTML =
+        '<div class="confirm-modal__overlay" id="' + opts.overlayId + '"></div>' +
+        '<div class="confirm-modal__card">' +
+          '<div class="confirm-modal__icon">' +
+            '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>' +
+              '<line x1="12" y1="9" x2="12" y2="13"></line>' +
+              '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
+            '</svg>' +
+          '</div>' +
+          '<h3 class="confirm-modal__title">Are you sure?</h3>' +
+          '<p class="confirm-modal__text">All data in this table will be permanently deleted. This action cannot be undone.</p>' +
+          '<div class="confirm-modal__actions">' +
+            '<button type="button" class="confirm-modal__btn confirm-modal__btn--cancel" id="' + opts.cancelId + '">Cancel</button>' +
+            '<button type="button" class="confirm-modal__btn confirm-modal__btn--danger" id="' + opts.confirmId + '">Clear All Data</button>' +
+          '</div>' +
+        '</div>';
+      section.appendChild(modal);
+    }
+
+    var btn = document.getElementById(opts.buttonId);
+    var confirmModal = document.getElementById(opts.modalId);
+    var overlay = document.getElementById(opts.overlayId);
+    var cancel = document.getElementById(opts.cancelId);
+    var confirm = document.getElementById(opts.confirmId);
+
+    if (!btn || !confirmModal || !overlay || !cancel || !confirm) return;
+    if (btn.getAttribute('data-clear-wired') === '1') return;
+    btn.setAttribute('data-clear-wired', '1');
+
+    function show() { confirmModal.hidden = false; }
+    function hide() { confirmModal.hidden = true; }
+
+    btn.addEventListener('click', show);
+    overlay.addEventListener('click', hide);
+    cancel.addEventListener('click', hide);
+    confirm.addEventListener('click', function () {
+      opts.onConfirm();
+      hide();
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && confirmModal && !confirmModal.hidden) hide();
+    });
+  }
+
   var selectedKeywords = [];
   var sentInvites = [];
   var readLog = [];
@@ -1795,6 +1865,8 @@
       }
       
       saveNetworkingKeywords();
+
+      chrome.storage.local.set({ crm_networking_run_requested: true });
       
       chrome.tabs.create({
         url: 'https://www.linkedin.com/mynetwork/grow/',
@@ -1935,6 +2007,39 @@
   loadNetworkingKeywords();
   loadSentInvites();
   loadReadLog();
+
+  ensureClearUiForPanel({
+    panelId: 'networking-panel-sent',
+    titleId: 'networking-sent-title',
+    titleText: 'Sent Invites',
+    buttonId: 'btnClearSentInvites',
+    modalId: 'clearSentInvitesConfirmModal',
+    overlayId: 'clearSentInvitesConfirmOverlay',
+    cancelId: 'clearSentInvitesCancel',
+    confirmId: 'clearSentInvitesConfirm',
+    onConfirm: function () {
+      sentInvites = [];
+      chrome.storage.local.set({ crm_sent_invites: [] });
+      updateSentInvitesUI();
+    }
+  });
+
+  ensureClearUiForPanel({
+    panelId: 'networking-panel-read',
+    titleId: 'networking-read-title',
+    titleText: 'Log',
+    buttonId: 'btnClearReadLog',
+    modalId: 'clearReadLogConfirmModal',
+    overlayId: 'clearReadLogConfirmOverlay',
+    cancelId: 'clearReadLogCancel',
+    confirmId: 'clearReadLogConfirm',
+    onConfirm: function () {
+      readLog = [];
+      chrome.storage.local.set({ crm_networking_read_log: [] });
+      updateReadLogUI();
+    }
+  });
+
   refreshLeadsNameSet(function () {
     updateSentInvitesUI();
   });

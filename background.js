@@ -39,6 +39,8 @@ const G = {
 
 const growScrolledTabs = new Set();
 
+const NETWORKING_RUN_FLAG = 'crm_networking_run_requested';
+
 function isGrowUrl(url) {
   if (!url) return false;
   try {
@@ -287,6 +289,28 @@ async function triggerGrowScroll(tabId) {
               }
             }
 
+            // Extra fallback:
+            // If LinkedIn puts "Name (+ badges etc.)" in the first block,
+            // the real bio is usually in the NEXT sibling block and stored in a <p>.
+            const nameLower = safeText(name).toLowerCase();
+            const bioLower = safeText(bio).toLowerCase();
+            const looksLikeNameLine = !!bioLower
+              && (bioLower === nameLower || bioLower.startsWith(nameLower) || bioLower.includes(nameLower));
+
+            if (!bio || looksLikeNameLine) {
+              try {
+                const container = a.closest('div');
+                const next = container ? container.nextElementSibling : null;
+                if (next) {
+                  const p = next.querySelector('p');
+                  const t = safeText(p ? p.textContent : '');
+                  if (t && t.toLowerCase() !== nameLower) bio = t;
+                }
+              } catch {
+                // ignore
+              }
+            }
+
             return { name, bio };
           } catch {
             return null;
@@ -493,6 +517,7 @@ async function triggerGrowScroll(tabId) {
   } catch (err) {
     console.warn('[CRM BG] Grow: scroll failed:', err?.message || err);
   } finally {
+    try { await chrome.storage.local.set({ [NETWORKING_RUN_FLAG]: false }); } catch { /* ignore */ }
     void zoomChanged;
   }
 }
@@ -503,9 +528,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (growScrolledTabs.has(tabId)) growScrolledTabs.delete(tabId);
     return;
   }
-  if (growScrolledTabs.has(tabId)) return;
-  growScrolledTabs.add(tabId);
-  triggerGrowScroll(tabId);
+
+  chrome.storage.local.get([NETWORKING_RUN_FLAG], (data) => {
+    const armed = !!(data && data[NETWORKING_RUN_FLAG]);
+    if (!armed) return;
+    if (growScrolledTabs.has(tabId)) return;
+    growScrolledTabs.add(tabId);
+    triggerGrowScroll(tabId);
+  });
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
