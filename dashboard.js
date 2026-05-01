@@ -751,7 +751,7 @@
     var n = Number(ts);
     if (!n || !isFinite(n)) return '';
     try {
-      return new Date(n).toLocaleString(undefined, {
+      return new Date(n).toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
         day: '2-digit',
