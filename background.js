@@ -422,7 +422,8 @@ async function triggerGrowScroll(tabId) {
                 firstName: n.firstName,
                 lastName: n.lastName,
                 profileUrl: href,
-                bio: parsed.bio
+                bio: parsed.bio,
+                sentAt: Date.now()
               });
               rememberRead(href, parsed.name, parsed.bio, true, true);
               await sleep(200);

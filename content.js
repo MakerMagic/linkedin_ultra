@@ -330,6 +330,8 @@
         console.log(`[CRM] Skipping duplicate (resume): ${contact.profileUrl}`);
         continue;
       }
+      // Date of sync (first time we saw/saved this contact)
+      contact.syncedAt = Date.now();
       fresh.push(contact);
     }
     return fresh;

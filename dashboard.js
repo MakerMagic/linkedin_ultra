@@ -677,6 +677,7 @@
   var contactCardName    = document.getElementById('contactCardName');
   var contactCardConnection = document.getElementById('contactCardConnection');
   var contactCardUrl     = document.getElementById('contactCardUrl');
+  var contactCardSyncDate = document.getElementById('contactCardSyncDate');
   var contactCardJobTitle = document.getElementById('contactCardJobTitle');
   var contactCardCompany = document.getElementById('contactCardCompany');
   var contactCardSchool  = document.getElementById('contactCardSchool');
@@ -695,6 +696,7 @@
   var netContactAvatar  = document.getElementById('netContactAvatar');
   var netContactName    = document.getElementById('netContactName');
   var netContactUrl     = document.getElementById('netContactUrl');
+  var netContactInviteDate = document.getElementById('netContactInviteDate');
   var netContactBio     = document.getElementById('netContactBio');
 
   var clearAllConfirmModal = document.getElementById('clearAllConfirmModal');
@@ -723,6 +725,22 @@
   function isContactConnected(c) {
     if (!c) return false;
     return c.connected === true || c.connected === 'YES' || c.connected === 'yes';
+  }
+
+  function formatCompactDateTime(ts) {
+    var n = Number(ts);
+    if (!n || !isFinite(n)) return '';
+    try {
+      return new Date(n).toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return '';
+    }
   }
 
   function getFilterLabel() {
@@ -1088,6 +1106,11 @@
       contactCardUrl.textContent = c.profileUrl || 'вЂ”';
     }
 
+    if (contactCardSyncDate) {
+      var syncText = formatCompactDateTime(c.syncedAt);
+      contactCardSyncDate.textContent = syncText || 'вЂ”';
+    }
+
     if (contactCardDescriptionSection) {
       contactCardDescriptionSection.hidden = true;
     }
@@ -1135,6 +1158,11 @@
     if (netContactUrl) {
       netContactUrl.href        = url || '#';
       netContactUrl.textContent = url || '—';
+    }
+
+    if (netContactInviteDate) {
+      var inviteText = formatCompactDateTime(invite.sentAt);
+      netContactInviteDate.textContent = inviteText || '—';
     }
 
     if (netContactBio) netContactBio.textContent = bio || '—';
