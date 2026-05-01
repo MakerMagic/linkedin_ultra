@@ -1,5 +1,5 @@
 ﻿/**
- * dashboard.js вЂ” LinkedIn CRM v2.5
+ * dashboard.js — LinkedIn CRM v2.5
  *
  * Changes vs v2.4:
  *   - Navigation: "Sync" nav item renamed to "Leads"
@@ -10,19 +10,20 @@
 (function () {
   'use strict';
 
-  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
-  // рџ‘‰ DEMO VIDEO вЂ” Help tab (with controls)
+  // *******************************************************
+  // DEMO VIDEO — Help tab (with controls)
   const DEMO_VIDEO_URL = 'PASTE_YOUR_VIDEO_LINK_HERE';
 
-  // рџ‘‰ HELP VIDEO вЂ” split screen popover (autoplay loop muted)
+  // HELP VIDEO — split screen popover (autoplay loop muted)
   const HELP_VIDEO_URL = 'PASTE_YOUR_VIDEO_LINK_HERE';
-  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+  // *******************************************************
 
   const CIRCUMFERENCE      = 2 * Math.PI * 52;
   const HEARTBEAT_STALE_MS = 15000;
   const PAGE_SIZE          = 15;
 
-  // в”Ђв”Ђ DOM refs в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // DOM refs
   var arc        = document.getElementById('progressArc');
   var pctEl      = document.getElementById('progressPercent');
   var statusEl   = document.getElementById('syncStatus');
@@ -38,7 +39,8 @@
   var navButtons = document.querySelectorAll('.nav__item[data-nav]:not([disabled])');
   var panels     = document.querySelectorAll('.main-panel[data-panel]');
 
-  // в”Ђв”Ђ Data table refs в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Data table refs
   var ctableBody    = document.getElementById('ctableBody');
   var tableFooter   = document.getElementById('tableFooter');
   var paginationEl  = document.getElementById('tablePagination');
@@ -46,12 +48,14 @@
   var dataCardCount = document.getElementById('dataCardCount');
   var dataTabBadge  = document.getElementById('dataTabBadge');
 
-  // в”Ђв”Ђ Table state в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Table state
   var tableContacts    = [];
   var tableCurrentPage = 1;
   var currentLeadsTab  = 'sync';
 
-  // в”Ђв”Ђ Demo video (Help tab) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Demo video (Help tab)
   var demoVideo    = document.getElementById('demoVideo');
   var demoVideoSrc = document.getElementById('demoVideoSrc');
   if (demoVideo && demoVideoSrc && DEMO_VIDEO_URL !== 'PASTE_YOUR_VIDEO_LINK_HERE') {
@@ -59,7 +63,8 @@
     demoVideo.load();
   }
 
-  // в”Ђв”Ђ Split screen popover video в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Split screen popover video
   var helpVideoEl  = document.getElementById('w4m9qx');
   var helpVideoSrc = document.getElementById('w4m9qxSrc');
   if (helpVideoEl && helpVideoSrc && HELP_VIDEO_URL !== 'PASTE_YOUR_VIDEO_LINK_HERE') {
@@ -93,7 +98,8 @@
     });
   }
 
-  // в”Ђв”Ђ FAQ accordion в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // FAQ accordion
   document.querySelectorAll('.faq__question').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var expanded = btn.getAttribute('aria-expanded') === 'true';
@@ -112,7 +118,8 @@
     });
   });
 
-  // в”Ђв”Ђ Main navigation в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Main navigation
   function setActiveView(viewId) {
     navButtons.forEach(function (btn) {
       var id = btn.getAttribute('data-nav');
@@ -148,7 +155,8 @@
     });
   });
 
-  // в”Ђв”Ђ Leads sub-tab switching в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Leads sub-tab switching
   function setLeadsTab(tabId) {
     currentLeadsTab = tabId;
 
@@ -185,7 +193,8 @@
     });
   });
 
-  // в”Ђв”Ђ Progress ring в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Progress ring
   function setRingProgress(pct) {
     var p = Math.max(0, Math.min(100, pct));
     if (arc) {
@@ -195,7 +204,8 @@
     if (pctEl) pctEl.textContent = String(Math.round(p));
   }
 
-  // в”Ђв”Ђ ETA formatting в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // ETA formatting
   function formatEta(s) {
     if (s === null || s === undefined || s < 0) return null;
     if (s < 60)  return '~' + Math.max(1, Math.round(s)) + 's';
@@ -205,7 +215,8 @@
     return rm > 0 ? '~' + h + 'h ' + rm + 'min' : '~' + h + 'h';
   }
 
-  // в”Ђв”Ђ State в†’ UI в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // State → UI
   function applyState(status, phase, count, percent, total, label, etaSeconds) {
     var running     = status === 'running';
     var isDone      = status === 'done';
@@ -234,10 +245,10 @@
     if (statusEl) {
       statusEl.textContent = ({
         idle:    'Waiting to start',
-        running: 'SyncingвЂ¦',
+        running: 'Syncing...',
         stopped: 'Stopped',
-        done:    'Completed вњ“',
-        error:   'Error вЂ” check LinkedIn console'
+        done:    'Completed ',
+        error:   'Error — check LinkedIn console'
       })[status] || 'Waiting to start';
     }
 
@@ -258,7 +269,8 @@
     }
   }
 
-  // в”Ђв”Ђ Data tab badge в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Data tab badge
   function updateDataBadge(count) {
     if (!dataTabBadge) return;
     if (count > 0) {
@@ -269,7 +281,8 @@
     }
   }
 
-  // в”Ђв”Ђ Init storage load в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Init storage load
   var ALL_KEYS = [
     'crm_sync_status', 'crm_sync_phase', 'crm_sync_count',
     'crm_sync_percent', 'crm_sync_total', 'crm_sync_label',
@@ -316,7 +329,8 @@
     });
   });
 
-  // в”Ђв”Ђ Modal в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Modal
   function showModal() { if (restartModal) restartModal.hidden = false; }
   function hideModal() { if (restartModal) restartModal.hidden = true; }
 
@@ -334,9 +348,10 @@
     if (e.key === 'Escape' && restartModal && !restartModal.hidden) hideModal();
   });
 
-  // в”Ђв”Ђ Restart в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Restart
   async function performRestart() {
-    if (statusEl) statusEl.textContent = 'ResettingвЂ¦';
+    if (statusEl) statusEl.textContent = 'Resetting...';
     if (btnStart) btnStart.disabled = true;
     await new Promise(function (resolve) {
       chrome.runtime.sendMessage({ type: 'RESTART_SYNC' }, function (r) {
@@ -344,15 +359,16 @@
         resolve();
       });
     });
-    if (statusEl) statusEl.textContent = 'Reloading LinkedInвЂ¦';
+    if (statusEl) statusEl.textContent = 'Reloading LinkedIn...';
     await new Promise(function (r) { setTimeout(r, 4000); });
     await handleStart();
   }
 
-  // в”Ђв”Ђ Start в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Start
   async function handleStart() {
     if (btnStart) btnStart.disabled = true;
-    if (statusEl) statusEl.textContent = 'Connecting to LinkedInвЂ¦';
+    if (statusEl) statusEl.textContent = 'Connecting to LinkedIn...';
     var ok = await new Promise(function (resolve) {
       chrome.runtime.sendMessage({ type: 'ENSURE_CONTENT_SCRIPT' }, function (r) {
         if (chrome.runtime.lastError) { resolve(true); return; }
@@ -381,7 +397,8 @@
     });
   }
 
-  // в”Ђв”Ђ CSV / TSV export в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // CSV / TSV export
   function downloadTSV(contacts) {
     if (!contacts || !contacts.length) return;
     function clean(v) { return String(v || '').replace(/\t/g, ' ').replace(/\r?\n/g, ' '); }
@@ -415,7 +432,8 @@
     });
   }
 
-  // в”Ђв”Ђ HTML escape в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // HTML escape
   function esc(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -424,7 +442,8 @@
       .replace(/"/g, '&quot;');
   }
 
-  // в”Ђв”Ђ Data table renderer в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Data table renderer
   function renderDataTableWithSelection() {
     if (!ctableBody) return;
 
@@ -449,7 +468,7 @@
         : '';
     }
 
-    // в”Ђв”Ђ Empty state в”Ђв”Ђ
+    // Empty state
     if (slice.length === 0) {
       ctableBody.innerHTML =
         '<tr><td colspan="9">' +
@@ -470,7 +489,7 @@
       return;
     }
 
-    // в”Ђв”Ђ Rows в”Ђв”Ђ
+    // Rows
     var rows = slice.map(function (c, i) {
       var rowNum   = start + i + 1;
       var name     = esc(c.fullName  || '');
@@ -483,31 +502,31 @@
       if (url) {
         nameCell =
           '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + name + '">' +
-            '<span>' + (name || 'вЂ”') + '</span>' +
+            '<span>' + (name || '—') + '</span>' +
             '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
               '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
             '</svg>' +
           '</a>';
       } else {
-        nameCell = '<span>' + (name || '<span class="ctable__dash">вЂ”</span>') + '</span>';
+        nameCell = '<span>' + (name || '<span class="ctable__dash">—</span>') + '</span>';
       }
 
       return '<tr>' +
         '<td class="ctable__num">' + rowNum + '</td>' +
         '<td>' + nameCell + '</td>' +
-        '<td>' + (jobTitle || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
-        '<td>' + (company  || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
-        '<td>' + (school   || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (jobTitle || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (company  || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (school   || '<span class="ctable__dash">—</span>') + '</td>' +
       '</tr>';
     });
 
     ctableBody.innerHTML = rows.join('');
 
-    // в”Ђв”Ђ Footer в”Ђв”Ђ
+    // Footer
     if (tableFooter) tableFooter.hidden = false;
 
     if (paginationInfo) {
-      paginationInfo.textContent = start + 1 + 'вЂ“' + end + ' of ' + total.toLocaleString();
+      paginationInfo.textContent = start + 1 + '–' + end + ' of ' + total.toLocaleString();
     }
 
     if (paginationEl) {
@@ -519,7 +538,8 @@
     }
   }
 
-  // в”Ђв”Ђ Pagination renderer в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Pagination renderer
   function getPageRange(cur, total) {
     if (total <= 7) {
       var arr = [];
@@ -530,9 +550,9 @@
     var left  = Math.max(2, cur - delta);
     var right = Math.min(total - 1, cur + delta);
     var range = [1];
-    if (left > 2)        range.push('вЂ¦');
+    if (left > 2)        range.push('...');
     for (var p = left; p <= right; p++) range.push(p);
-    if (right < total - 1) range.push('вЂ¦');
+    if (right < total - 1) range.push('...');
     range.push(total);
     return range;
   }
@@ -553,8 +573,8 @@
 
     // Pages
     getPageRange(cur, totalPages).forEach(function (p) {
-      if (p === 'вЂ¦') {
-        html += '<span class="page-ellipsis" aria-hidden="true">вЂ¦</span>';
+      if (p === '...') {
+        html += '<span class="page-ellipsis" aria-hidden="true">...</span>';
       } else {
         html +=
           '<button class="page-btn' + (p === cur ? ' page-btn--active' : '') +
@@ -597,7 +617,8 @@
     });
   }
 
-  // в”Ђв”Ђ Search: industries в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Search: industries
   var INDUSTRY_OPTIONS = [
     { id: 'finance',        label: 'Finance'        },
     { id: 'consulting',     label: 'Consulting'     },
@@ -648,10 +669,8 @@
     });
   }
 
-  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+  // *******************************************************
   // ENRICH LEADS MODULE (Data Tab)
-  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
-
   var enrichBar          = document.getElementById('enrichBar');
   var enrichSelectAll    = document.getElementById('enrichSelectAll');
   var enrichRangeFrom    = document.getElementById('enrichRangeFrom');
@@ -849,7 +868,7 @@
     if (!enrichStats) return;
     var count = selectedRows.size;
     var filteredCount = getFilteredIndices().length;
-    enrichStats.textContent = (count > 0 ? ('Selected: ' + count + ' В· ') : '') + 'Showing: ' + filteredCount;
+    enrichStats.textContent = (count > 0 ? ('Selected: ' + count + ' · ') : '') + 'Showing: ' + filteredCount;
   }
 
   function updateEnrichButton() {
@@ -871,10 +890,10 @@
         '</svg>' +
       '</button>';
 
-
+    // Pages
     getPageRange(cur, totalPages).forEach(function (p) {
-      if (p === 'вЂ¦') {
-        html += '<span class="page-ellipsis" aria-hidden="true">вЂ¦</span>';
+      if (p === '...') {
+        html += '<span class="page-ellipsis" aria-hidden="true">...</span>';
       } else {
         html +=
           '<button class="page-btn' + (p === cur ? ' page-btn--active' : '') +
@@ -892,10 +911,9 @@
         '</svg>' +
       '</button>';
 
-
     paginationEl.innerHTML = html;
 
-
+    // Bind page number buttons
     paginationEl.querySelectorAll('[data-page]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         tableCurrentPage = parseInt(btn.getAttribute('data-page'), 10);
@@ -921,22 +939,20 @@
   function renderDataTableWithSelection() {
     if (!ctableBody) return;
 
-
     var filteredIdx = getFilteredIndices();
     var total      = filteredIdx.length;
     var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-
+    // Clamp page
     if (tableCurrentPage > totalPages) tableCurrentPage = totalPages;
     if (tableCurrentPage < 1)          tableCurrentPage = 1;
-
 
     var start = (tableCurrentPage - 1) * PAGE_SIZE;
     var end   = Math.min(start + PAGE_SIZE, total);
     var pageIdx = filteredIdx.slice(start, end);
     var slice = pageIdx.map(function (absIndex) { return tableContacts[absIndex]; });
 
-
+    // Update header count
     if (dataCardCount) {
       var overall = tableContacts.length;
       dataCardCount.textContent = overall > 0
@@ -944,7 +960,7 @@
         : '';
     }
 
-
+    // Empty state
     if (slice.length === 0) {
       ctableBody.innerHTML =
         '<tr><td colspan="9">' +
@@ -968,7 +984,7 @@
       return;
     }
 
-
+    // Rows
     var rows = slice.map(function (c, i) {
       var absIndex   = pageIdx[i];
       var rowNum     = start + i + 1;
@@ -981,37 +997,32 @@
       var school     = esc(c.school    || '');
       var major      = esc(c.major     || '');
 
-
       var urlCell;
       if (url) {
-        var displayUrl = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + 'вЂ¦';
         urlCell =
           '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
-            '<span>' + displayUrl + '</span>' +
+            '<span>' + (url || '—') + '</span>' +
             '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
               '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
             '</svg>' +
           '</a>';
       } else {
-        urlCell = '<span class="ctable__dash">вЂ”</span>';
+        urlCell = '<span class="ctable__dash">—</span>';
       }
-
 
       var checkboxCell =
         '<td class="ctable__check">' +
           '<input type="checkbox" data-index="' + absIndex + '" ' + (isSelected ? 'checked' : '') + '>' +
         '</td>';
 
-
       var trClass = isSelected ? 'ctable__row--selected' : '';
 
       var firstNameCell = firstName
         ? '<span class="ctable__name" data-index="' + absIndex + '">' + firstName + '</span>'
-        : '<span class="ctable__dash">вЂ”</span>';
+        : '<span class="ctable__dash">—</span>';
       var lastNameCell = lastName
         ? '<span class="ctable__name" data-index="' + absIndex + '">' + lastName + '</span>'
-        : '<span class="ctable__dash">вЂ”</span>';
+        : '<span class="ctable__dash">—</span>';
 
       return '<tr class="' + trClass + '">' +
         checkboxCell +
@@ -1019,51 +1030,26 @@
         '<td>' + firstNameCell + '</td>' +
         '<td>' + lastNameCell + '</td>' +
         '<td>' + urlCell + '</td>' +
-        '<td>' + (jobTitle  || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
-        '<td>' + (company   || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
-        '<td>' + (school    || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
-        '<td>' + (major     || '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (jobTitle  || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (company   || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (school    || '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (major     || '<span class="ctable__dash">—</span>') + '</td>' +
       '</tr>';
     });
 
-
     ctableBody.innerHTML = rows.join('');
 
-
-    ctableBody.querySelectorAll('input[type="checkbox"][data-index]').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        var idx = parseInt(cb.getAttribute('data-index'), 10);
-        if (cb.checked) selectedRows.add(idx);
-        else selectedRows.delete(idx);
-        updateSelectAllState();
-        updateEnrichStats();
-        updateEnrichButton();
-        var tr = cb.closest('tr');
-        if (tr) tr.classList.toggle('ctable__row--selected', cb.checked);
-      });
-    });
-
-    ctableBody.querySelectorAll('.ctable__name').forEach(function (nameEl) {
-      nameEl.addEventListener('click', function () {
-        var idx = parseInt(nameEl.getAttribute('data-index'), 10);
-        openContactCard(idx);
-      });
-    });
-
-
+    // Footer
     if (tableFooter) tableFooter.hidden = false;
 
     if (paginationInfo) {
-      if (total === 0) paginationInfo.textContent = '0 of 0';
-      else paginationInfo.textContent = (start + 1) + 'вЂ“' + end + ' of ' + total.toLocaleString();
+      paginationInfo.textContent = start + 1 + '–' + end + ' of ' + total.toLocaleString();
     }
-
 
     if (paginationEl) {
       if (totalPages <= 1) paginationEl.innerHTML = '';
       else renderPaginationWithEnrich(totalPages);
     }
-
 
     updateSelectAllState();
     updateEnrichStats();
@@ -1103,12 +1089,12 @@
 
     if (contactCardUrl) {
       contactCardUrl.href = c.profileUrl || '#';
-      contactCardUrl.textContent = c.profileUrl || 'вЂ”';
+      contactCardUrl.textContent = c.profileUrl || '—';
     }
 
     if (contactCardSyncDate) {
       var syncText = formatCompactDateTime(c.syncedAt);
-      contactCardSyncDate.textContent = syncText || 'вЂ”';
+      contactCardSyncDate.textContent = syncText || '—';
     }
 
     if (contactCardDescriptionSection) {
@@ -1131,7 +1117,7 @@
       contactCardMajor.textContent = c.major || '';
     }
     if (contactCardRegion) {
-      contactCardRegion.textContent = c.region || 'вЂ”';
+      contactCardRegion.textContent = c.region || '—';
     }
     if (contactCardNotes) {
       contactCardNotes.value = c.notes || '';
@@ -1198,13 +1184,11 @@
     }
   });
 
-
   if (enrichSelectAll) {
     enrichSelectAll.addEventListener('change', function () {
       var filteredIdx = getFilteredIndices();
       var start = (tableCurrentPage - 1) * PAGE_SIZE;
       var end   = Math.min(start + PAGE_SIZE, filteredIdx.length);
-
 
       if (enrichSelectAll.checked) {
         for (var p = start; p < end; p++) selectedRows.add(filteredIdx[p]);
@@ -1212,11 +1196,9 @@
         for (var p = start; p < end; p++) selectedRows.delete(filteredIdx[p]);
       }
 
-
       renderDataTableWithSelection();
     });
   }
-
 
   if (btnEnrichRange) {
     btnEnrichRange.addEventListener('click', function () {
@@ -1226,11 +1208,9 @@
       var filteredIdx = getFilteredIndices();
       if (filteredIdx.length === 0) return;
 
-
       var from = Math.max(1, Math.min(fromVal, filteredIdx.length));
       var to   = Math.max(from, Math.min(toVal, filteredIdx.length));
       for (var i = from - 1; i < to; i++) selectedRows.add(filteredIdx[i]);
-
 
       renderDataTableWithSelection();
       if (enrichRangeFrom) enrichRangeFrom.value = '';
@@ -1238,13 +1218,11 @@
     });
   }
 
-
   function updateEnrichProgress(current, total, status) {
     if (enrichCount)  enrichCount.textContent = current + ' / ' + total;
     if (enrichStatus) enrichStatus.textContent = status || ('Processing ' + current + ' of ' + total);
     if (enrichFill)   enrichFill.style.width = total > 0 ? (current / total * 100) + '%' : '0%';
   }
-
 
   function stopEnrich() {
     if (!isEnrichRunning) return;
@@ -1263,31 +1241,25 @@
       return;
     }
 
-
     isEnrichRunning = true;
     updateEnrichButton();
     if (enrichProgress) enrichProgress.hidden = false;
     if (btnEnrichStop)  btnEnrichStop.hidden  = false;
     if (enrichBar)      enrichBar.style.opacity = '0.6';
 
-
     var indices = Array.from(selectedRows).sort(function (a, b) { return a - b; });
     var toEnrich = indices.map(function (idx) { return tableContacts[idx]; });
 
-
     selectedRows.clear();
     renderDataTableWithSelection();
-
 
     var processed = 0;
     var total = toEnrich.length;
     updateEnrichProgress(0, total, 'Starting...');
 
-
     for (var i = 0; i < toEnrich.length && isEnrichRunning; i++) {
       var contact = toEnrich[i];
       updateEnrichProgress(i, total, 'Opening: ' + (contact.fullName || 'Profile'));
-
 
       try {
         var result = await new Promise(function (resolve) {
@@ -1302,7 +1274,6 @@
             resolve(r || { ok: false });
           });
         });
-
 
         if (result.ok && result.data) {
           var NF = 'Not Found';
@@ -1323,7 +1294,6 @@
             : (contact.region && String(contact.region).trim()) ? contact.region : NF;
         }
 
-
         processed++;
         updateEnrichProgress(processed, total, 'Processed: ' + processed + ' of ' + total);
         await saveContactsToStorage();
@@ -1332,12 +1302,10 @@
         console.error('[Enrich] Error processing contact:', err);
       }
 
-
       if (i < toEnrich.length - 1) {
         await new Promise(function (r) { setTimeout(r, 700 + Math.random() * 300); });
       }
     }
-
 
     isEnrichRunning = false;
     if (enrichProgress) enrichProgress.hidden = true;
@@ -1347,17 +1315,14 @@
     renderDataTableWithSelection();
   }
 
-
   if (btnEnrichSelected) btnEnrichSelected.addEventListener('click', startEnrich);
   if (btnEnrichStop)     btnEnrichStop.addEventListener('click', stopEnrich);
-
 
   if (enrichFilterBtn && enrichFilterMenu) {
     enrichFilterBtn.addEventListener('click', function () {
       var isHidden = enrichFilterMenu.hidden;
       setFilterMenuOpen(isHidden);
     });
-
 
     enrichFilterMenu.querySelectorAll('.enrich-filter-dd__item').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -1372,14 +1337,12 @@
       });
     });
 
-
     var enrichFilterClear = document.getElementById('enrichFilterClear');
     if (enrichFilterClear) {
       enrichFilterClear.addEventListener('click', function () {
         clearAllFilters();
       });
     }
-
 
     document.addEventListener('click', function (e) {
       if (enrichFilterMenu.hidden) return;
@@ -1388,7 +1351,6 @@
       if (enrichFilterMenu.contains(t)) return;
       setFilterMenuOpen(false);
     });
-
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && enrichFilterMenu && !enrichFilterMenu.hidden) {
@@ -1406,9 +1368,7 @@
     }
   }
 
-
   applyFilters();
-
 
   function closeContactCard() {
     if (contactCardModal) {
@@ -1530,10 +1490,10 @@
     }
   });
 
-
   var renderDataTable = renderDataTableWithSelection;
 
-  // в”Ђв”Ђ Save contacts to storage в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // *******************************************************
+  // Save contacts to storage
   function saveContactsToStorage() {
     return new Promise(function (resolve) {
       chrome.storage.local.set({ crm_contacts: tableContacts }, function () {
@@ -1602,11 +1562,8 @@
     });
   }
 
-
-  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+  // *******************************************************
   // NETWORKING MODULE
-  // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
-
   var networkingKeywordsInput = document.getElementById('networkingKeywords');
   var networkingKeywordsList = document.getElementById('networkingKeywordsList');
   var networkingKeywordsSection = document.getElementById('networkingKeywordsSection');
@@ -2012,7 +1969,7 @@
       var urlCell;
       if (url) {
         var displayUrl = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + 'вЂ¦';
+        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + '...';
         urlCell = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
           '<span>' + esc(displayUrl) + '</span>' +
           '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
@@ -2020,12 +1977,12 @@
           '</svg>' +
         '</a>';
       } else {
-        urlCell = '<span class="ctable__dash">вЂ”</span>';
+        urlCell = '<span class="ctable__dash">—</span>';
       }
 
       return '<tr>' +
-        '<td>' + (item.firstName ? esc(item.firstName) : '<span class="ctable__dash">вЂ”</span>') + '</td>' +
-        '<td>' + (item.lastName ? esc(item.lastName) : '<span class="ctable__dash">вЂ”</span>') + '</td>' +
+        '<td>' + (item.firstName ? esc(item.firstName) : '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (item.lastName ? esc(item.lastName) : '<span class="ctable__dash">—</span>') + '</td>' +
         '<td>' + urlCell + '</td>' +
         '<td>' + esc(item.bio || item.description || '') + '</td>' +
       '</tr>';
