@@ -717,6 +717,7 @@
   var netContactUrl     = document.getElementById('netContactUrl');
   var netContactInviteDate = document.getElementById('netContactInviteDate');
   var netContactBio     = document.getElementById('netContactBio');
+  var netContactConnection = document.getElementById('netContactConnection');
 
   var clearAllConfirmModal = document.getElementById('clearAllConfirmModal');
   var clearAllConfirmOverlay = document.getElementById('clearAllConfirmOverlay');
@@ -1160,6 +1161,12 @@
     }
 
     if (netContactBio) netContactBio.textContent = bio || '—';
+
+    if (netContactConnection) {
+      var isConnected = invite.connected === true || invite.connected === 'YES' || invite.connected === 'yes';
+      netContactConnection.textContent = 'Connected: ' + (isConnected ? 'YES' : 'NO');
+      netContactConnection.className = 'contact-card__connection ' + (isConnected ? 'contact-card__connection--yes' : 'contact-card__connection--no');
+    }
 
     netContactModal.hidden = false;
   }

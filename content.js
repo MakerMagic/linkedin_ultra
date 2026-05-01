@@ -332,11 +332,14 @@
       }
       // Date of sync (first time we saw/saved this contact)
       contact.syncedAt = Date.now();
+      // Contacts added via sync are already connections (Connected: Yes)
+      contact.connected = true;
       fresh.push(contact);
     }
     return fresh;
   }
 
+// ... (rest of the code remains the same)
   function waitForNewCards(currentCount, timeoutMs, token) {
     return new Promise((resolve, reject) => {
       if (token.cancelled) { reject(new CancelledError()); return; }
