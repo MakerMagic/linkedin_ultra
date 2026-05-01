@@ -260,13 +260,15 @@ async function triggerGrowScroll(tabId) {
             // 2) Bio (вторая строка карточки, либо ближайший p/second span)
             let bio = '';
 
-            // Попытка: взять самый “длинный” p внутри anchor, который не равен name
+            const nameLower = safeText(name).toLowerCase();
+
+            // Попытка: взять самый “длинный” p внутри anchor, который НЕ содержит name
             const ps = Array.from(a.querySelectorAll('p'));
             let best = '';
             for (const p of ps) {
               const t = safeText(p.textContent);
               if (!t) continue;
-              if (t === name) continue;
+              if (safeText(t).toLowerCase().includes(nameLower)) continue;
               if (t.length > best.length) best = t;
             }
             if (best) bio = best;
@@ -290,21 +292,43 @@ async function triggerGrowScroll(tabId) {
             }
 
             // Extra fallback:
-            // If LinkedIn puts "Name (+ badges etc.)" in the first block,
-            // the real bio is usually in the NEXT sibling block and stored in a <p>.
-            const nameLower = safeText(name).toLowerCase();
+            // Если в извлечённом bio всё ещё встречается имя (или bio пустой),
+            // значит мы попали в блок "имя + бейджи". Тогда ищем следующий sibling-блок
+            // и берём <p> уже оттуда.
             const bioLower = safeText(bio).toLowerCase();
-            const looksLikeNameLine = !!bioLower
-              && (bioLower === nameLower || bioLower.startsWith(nameLower) || bioLower.includes(nameLower));
+            const looksLikeNameLine = !!bioLower && bioLower.includes(nameLower);
 
             if (!bio || looksLikeNameLine) {
               try {
-                const container = a.closest('div');
+                let nameBlock = null;
+
+                // 1) Prefer <p> that contains the name (it is the most stable anchor)
+                for (const p of ps) {
+                  const t = safeText(p.textContent);
+                  if (t && safeText(t).toLowerCase().includes(nameLower)) {
+                    nameBlock = p;
+                    break;
+                  }
+                }
+
+                // 2) Fallback: any element inside <a> that contains name
+                if (!nameBlock) {
+                  const all = Array.from(a.querySelectorAll('*'));
+                  for (const el of all) {
+                    const t = safeText(el.textContent);
+                    if (t && safeText(t).toLowerCase().includes(nameLower)) {
+                      nameBlock = el;
+                      break;
+                    }
+                  }
+                }
+
+                const container = nameBlock ? nameBlock.closest('div') : null;
                 const next = container ? container.nextElementSibling : null;
                 if (next) {
                   const p = next.querySelector('p');
                   const t = safeText(p ? p.textContent : '');
-                  if (t && t.toLowerCase() !== nameLower) bio = t;
+                  if (t && !safeText(t).toLowerCase().includes(nameLower)) bio = t;
                 }
               } catch {
                 // ignore
