@@ -719,6 +719,25 @@
   var netContactBio     = document.getElementById('netContactBio');
   var netContactConnection = document.getElementById('netContactConnection');
 
+  // ── Date Picker ─────────────────────
+  var datePickerModal = document.getElementById('datePickerModal');
+  var datePickerOverlay = document.getElementById('datePickerOverlay');
+  var datePickerClose = document.getElementById('datePickerClose');
+  var datePickerCancel = document.getElementById('datePickerCancel');
+  var datePickerApply = document.getElementById('datePickerApply');
+  var datePickerPrevMonth = document.getElementById('datePickerPrevMonth');
+  var datePickerNextMonth = document.getElementById('datePickerNextMonth');
+  var datePickerMonth = document.getElementById('datePickerMonth');
+  var datePickerYear = document.getElementById('datePickerYear');
+  var datePickerDays = document.getElementById('datePickerDays');
+  var datePickerRangeDisplay = document.getElementById('datePickerRangeDisplay');
+  var datePickerDateBtn = document.getElementById('enrichFilterDateBtn');
+
+  var dateFilterStart = null;
+  var dateFilterEnd = null;
+  var datePickerCurrentDate = new Date();
+  var datePickerSelecting = false;
+
   var clearAllConfirmModal = document.getElementById('clearAllConfirmModal');
   var clearAllConfirmOverlay = document.getElementById('clearAllConfirmOverlay');
   var clearAllCancel     = document.getElementById('clearAllCancel');
@@ -763,6 +782,148 @@
     }
   }
 
+  // ── Date Picker Functions ─────────────────────
+  function formatDateShort(d) {
+    if (!d) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function isSameDay(d1, d2) {
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+  }
+
+  function isBetweenDates(d, start, end) {
+    if (!start || !end) return false;
+    var t = d.getTime();
+    return t >= start.getTime() && t <= end.getTime();
+  }
+
+  function initDatePicker() {
+    if (!datePickerMonth || !datePickerYear) return;
+    var months = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December'];
+    datePickerMonth.innerHTML = months.map(function (m, i) {
+      return '<option value="' + i + '">' + m + '</option>';
+    }).join('');
+    var currentYear = new Date().getFullYear();
+    var years = [];
+    for (var y = currentYear; y >= currentYear - 5; y--) years.push(y);
+    datePickerYear.innerHTML = years.map(function (y) {
+      return '<option value="' + y + '">' + y + '</option>';
+    }).join('');
+  }
+
+  function renderCalendar() {
+    if (!datePickerDays || !datePickerMonth || !datePickerYear) return;
+    var year = datePickerCurrentDate.getFullYear();
+    var month = datePickerCurrentDate.getMonth();
+    datePickerMonth.value = month;
+    datePickerYear.value = year;
+
+    var firstDay = new Date(year, month, 1);
+    var lastDay = new Date(year, month + 1, 0);
+    var startDayOfWeek = firstDay.getDay();
+    var daysInMonth = lastDay.getDate();
+    var today = new Date();
+
+    var html = '';
+    for (var i = 0; i < startDayOfWeek; i++) {
+      html += '<button type="button" class="date-picker-day" disabled></button>';
+    }
+    for (var day = 1; day <= daysInMonth; day++) {
+      var date = new Date(year, month, day);
+      var classes = ['date-picker-day'];
+      if (isSameDay(date, today)) classes.push('date-picker-day--today');
+      if (dateFilterStart && isSameDay(date, dateFilterStart)) classes.push('date-picker-day--start');
+      if (dateFilterEnd && isSameDay(date, dateFilterEnd)) classes.push('date-picker-day--end');
+      if (dateFilterStart && dateFilterEnd && isBetweenDates(date, dateFilterStart, dateFilterEnd)) {
+        if (!isSameDay(date, dateFilterStart) && !isSameDay(date, dateFilterEnd)) {
+          classes.push('date-picker-day--in-range');
+        }
+      }
+      html += '<button type="button" class="' + classes.join(' ') + '" data-day="' + day + '">' + day + '</button>';
+    }
+    datePickerDays.innerHTML = html;
+
+    datePickerDays.querySelectorAll('.date-picker-day:not(:disabled)').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var day = parseInt(btn.getAttribute('data-day'), 10);
+        var selectedDate = new Date(datePickerCurrentDate.getFullYear(), datePickerCurrentDate.getMonth(), day);
+        handleDateClick(selectedDate);
+      });
+    });
+  }
+
+  function handleDateClick(date) {
+    if (!datePickerSelecting || !dateFilterStart) {
+      dateFilterStart = date;
+      dateFilterEnd = null;
+      datePickerSelecting = true;
+    } else {
+      if (date.getTime() < dateFilterStart.getTime()) {
+        dateFilterEnd = dateFilterStart;
+        dateFilterStart = date;
+      } else {
+        dateFilterEnd = date;
+      }
+      datePickerSelecting = false;
+    }
+    updateDatePickerDisplay();
+    renderCalendar();
+  }
+
+  function updateDatePickerDisplay() {
+    if (!datePickerRangeDisplay) return;
+    if (!dateFilterStart) {
+      datePickerRangeDisplay.innerHTML = '<span class="date-picker-range__label">Select start and end dates</span>';
+    } else if (!dateFilterEnd) {
+      datePickerRangeDisplay.innerHTML = '<span class="date-picker-range__dates">From ' + formatDateShort(dateFilterStart) + ' — select end date</span>';
+    } else {
+      datePickerRangeDisplay.innerHTML = '<span class="date-picker-range__dates">' + formatDateShort(dateFilterStart) + ' — ' + formatDateShort(dateFilterEnd) + '</span>';
+    }
+  }
+
+  function openDatePicker() {
+    if (!datePickerModal) return;
+    datePickerModal.hidden = false;
+    datePickerSelecting = false;
+    initDatePicker();
+    renderCalendar();
+    updateDatePickerDisplay();
+  }
+
+  function closeDatePicker() {
+    if (datePickerModal) datePickerModal.hidden = true;
+  }
+
+  function applyDateFilter() {
+    if (dateFilterStart && dateFilterEnd) {
+      enrichFilterSet.add('date');
+    }
+    closeDatePicker();
+    updateFilterButtons();
+    updateDateFilterButton();
+    applyFilters();
+  }
+
+  function clearDateFilter() {
+    dateFilterStart = null;
+    dateFilterEnd = null;
+    datePickerSelecting = false;
+    enrichFilterSet.delete('date');
+    updateDateFilterButton();
+    renderCalendar();
+    updateDatePickerDisplay();
+  }
+
+  function updateDateFilterButton() {
+    if (!datePickerDateBtn) return;
+    var hasDateFilter = enrichFilterSet.has('date') && dateFilterStart && dateFilterEnd;
+    datePickerDateBtn.classList.toggle('enrich-filter-dd__item--active', hasDateFilter);
+  }
+
   function getFilterLabel() {
     if (enrichFilterSet.size === 0) return 'All';
     if (enrichFilterSet.size === 1) {
@@ -771,6 +932,7 @@
       if (m === 'not_enriched') return 'Not enriched';
       if (m === 'connected') return 'Connected';
       if (m === 'not_connected') return 'Not connected';
+      if (m === 'date') return 'Date range';
     }
     return enrichFilterSet.size + ' filters';
   }
@@ -811,6 +973,15 @@
       if (enrichFilterSet.has('connected') && !connected) continue;
       if (enrichFilterSet.has('not_connected') && connected) continue;
 
+      // Date filter (by syncedAt)
+      if (enrichFilterSet.has('date') && dateFilterStart && dateFilterEnd) {
+        var syncDate = c.syncedAt ? new Date(c.syncedAt) : null;
+        if (!syncDate) continue;
+        var dayStart = new Date(dateFilterStart.getFullYear(), dateFilterStart.getMonth(), dateFilterStart.getDate());
+        var dayEnd = new Date(dateFilterEnd.getFullYear(), dateFilterEnd.getMonth(), dateFilterEnd.getDate(), 23, 59, 59, 999);
+        if (syncDate.getTime() < dayStart.getTime() || syncDate.getTime() > dayEnd.getTime()) continue;
+      }
+
       if (!contactMatchesSearch(c, searchKeyword)) continue;
       out.push(i);
     }
@@ -826,7 +997,12 @@
 
   function clearAllFilters() {
     enrichFilterSet.clear();
+    dateFilterStart = null;
+    dateFilterEnd = null;
+    datePickerSelecting = false;
     updateFilterButtons();
+    updateDateFilterButton();
+    updateDatePickerDisplay();
     applyFilters();
   }
 
@@ -1342,6 +1518,12 @@
     enrichFilterMenu.querySelectorAll('.enrich-filter-dd__item').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var value = btn.getAttribute('data-filter');
+        // Date filter opens calendar instead of toggling
+        if (value === 'date') {
+          setFilterMenuOpen(false);
+          openDatePicker();
+          return;
+        }
         if (enrichFilterSet.has(value)) {
           enrichFilterSet.delete(value);
         } else {
@@ -1382,6 +1564,46 @@
       });
     }
   }
+
+  // Date picker event listeners
+  if (datePickerClose) datePickerClose.addEventListener('click', closeDatePicker);
+  if (datePickerOverlay) datePickerOverlay.addEventListener('click', closeDatePicker);
+  if (datePickerCancel) datePickerCancel.addEventListener('click', closeDatePicker);
+  if (datePickerApply) datePickerApply.addEventListener('click', applyDateFilter);
+
+  if (datePickerPrevMonth) {
+    datePickerPrevMonth.addEventListener('click', function () {
+      datePickerCurrentDate.setMonth(datePickerCurrentDate.getMonth() - 1);
+      renderCalendar();
+    });
+  }
+
+  if (datePickerNextMonth) {
+    datePickerNextMonth.addEventListener('click', function () {
+      datePickerCurrentDate.setMonth(datePickerCurrentDate.getMonth() + 1);
+      renderCalendar();
+    });
+  }
+
+  if (datePickerMonth) {
+    datePickerMonth.addEventListener('change', function () {
+      datePickerCurrentDate.setMonth(parseInt(datePickerMonth.value, 10));
+      renderCalendar();
+    });
+  }
+
+  if (datePickerYear) {
+    datePickerYear.addEventListener('change', function () {
+      datePickerCurrentDate.setFullYear(parseInt(datePickerYear.value, 10));
+      renderCalendar();
+    });
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && datePickerModal && !datePickerModal.hidden) {
+      closeDatePicker();
+    }
+  });
 
   applyFilters();
 

@@ -300,6 +300,7 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
                         <button type="button" class="enrich-filter-dd__item" data-filter="not_enriched">Not enriched</button>
                         <button type="button" class="enrich-filter-dd__item" data-filter="connected">Connected</button>
                         <button type="button" class="enrich-filter-dd__item" data-filter="not_connected">Not connected</button>
+                        <button type="button" class="enrich-filter-dd__item" id="enrichFilterDateBtn" data-filter="date">Date</button>
                         <button type="button" class="enrich-filter-dd__clear" id="enrichFilterClear">Clear all</button>
                       </div>
                     </div>
@@ -901,6 +902,50 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
             <span class="contact-card__label">Description / Bio</span>
             <span class="contact-card__value" id="netContactBio"></span>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Date Range Picker Modal -->
+    <div class="date-picker-modal" id="datePickerModal" hidden>
+      <div class="date-picker-overlay" id="datePickerOverlay"></div>
+      <div class="date-picker-card glass">
+        <div class="date-picker-header">
+          <h3 class="date-picker-title">Select Date Range</h3>
+          <button type="button" class="date-picker-close" id="datePickerClose" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="date-picker-range" id="datePickerRangeDisplay">
+          <span class="date-picker-range__label">Select start and end dates</span>
+        </div>
+        <div class="date-picker-controls">
+          <button type="button" class="date-picker-nav" id="datePickerPrevMonth" aria-label="Previous month">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <div class="date-picker-month-year">
+            <select class="date-picker-select" id="datePickerMonth"></select>
+            <select class="date-picker-select" id="datePickerYear"></select>
+          </div>
+          <button type="button" class="date-picker-nav" id="datePickerNextMonth" aria-label="Next month">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        </div>
+        <div class="date-picker-calendar">
+          <div class="date-picker-weekdays">
+            <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+          </div>
+          <div class="date-picker-days" id="datePickerDays"></div>
+        </div>
+        <div class="date-picker-actions">
+          <button type="button" class="date-picker-btn date-picker-btn--secondary" id="datePickerCancel">Cancel</button>
+          <button type="button" class="date-picker-btn date-picker-btn--primary" id="datePickerApply">Apply</button>
         </div>
       </div>
     </div>
