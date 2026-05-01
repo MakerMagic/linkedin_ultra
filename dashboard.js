@@ -1039,6 +1039,14 @@
 
     ctableBody.innerHTML = rows.join('');
 
+    // Wire up click handlers for name cells to open contact card
+    ctableBody.querySelectorAll('.ctable__name[data-index]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var idx = parseInt(el.getAttribute('data-index'), 10);
+        if (!isNaN(idx)) openContactCard(idx);
+      });
+    });
+
     // Footer
     if (tableFooter) tableFooter.hidden = false;
 
