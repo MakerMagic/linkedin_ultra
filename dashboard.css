@@ -3690,7 +3690,16 @@ html,body {
 
 }
 
+/* Filter bar in networking cards */
+.networking-card > .enrich-bar {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
 
+.networking-sent-layout {
+  position: relative;
+}
 
 .networking-start-layout {
 

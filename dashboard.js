@@ -737,6 +737,7 @@
   var dateFilterEnd = null;
   var datePickerCurrentDate = new Date();
   var datePickerSelecting = false;
+  var currentDatePickerTarget = 'leads'; // 'leads', 'sentInvites', or 'readLog'
 
   var clearAllConfirmModal = document.getElementById('clearAllConfirmModal');
   var clearAllConfirmOverlay = document.getElementById('clearAllConfirmOverlay');
@@ -750,6 +751,32 @@
   var searchKeyword      = '';
   var saveNotesResetTimer = null;
   var saveNotesHideTimer  = null;
+
+  // ── Sent Invites Filters ─────────────────────
+  var sentInvitesFilterBtn = document.getElementById('sentInvitesFilterBtn');
+  var sentInvitesFilterMenu = document.getElementById('sentInvitesFilterMenu');
+  var sentInvitesFilterLabel = document.getElementById('sentInvitesFilterLabel');
+  var sentInvitesFilterClear = document.getElementById('sentInvitesFilterClear');
+  var sentInvitesSearchInput = document.getElementById('sentInvitesSearchInput');
+  var sentInvitesStats = document.getElementById('sentInvitesStats');
+  var sentInvitesFilterWrap = document.getElementById('sentInvitesFilterWrap');
+  var sentInvitesFilterSet = new Set(['all']);
+  var sentInvitesSearchKeyword = '';
+  var sentInvitesDateStart = null;
+  var sentInvitesDateEnd = null;
+
+  // ── Read Log Filters ─────────────────────
+  var readLogFilterBtn = document.getElementById('readLogFilterBtn');
+  var readLogFilterMenu = document.getElementById('readLogFilterMenu');
+  var readLogFilterLabel = document.getElementById('readLogFilterLabel');
+  var readLogFilterClear = document.getElementById('readLogFilterClear');
+  var readLogSearchInput = document.getElementById('readLogSearchInput');
+  var readLogStats = document.getElementById('readLogStats');
+  var readLogFilterWrap = document.getElementById('readLogFilterWrap');
+  var readLogFilterSet = new Set(['all']);
+  var readLogSearchKeyword = '';
+  var readLogDateStart = null;
+  var readLogDateEnd = null;
 
   function isContactEnriched(c) {
     if (!c) return false;
@@ -828,6 +855,8 @@
     var daysInMonth = lastDay.getDate();
     var today = new Date();
 
+    var dates = getDateFilterForTarget();
+
     var html = '';
     for (var i = 0; i < startDayOfWeek; i++) {
       html += '<button type="button" class="date-picker-day" disabled></button>';
@@ -836,10 +865,10 @@
       var date = new Date(year, month, day);
       var classes = ['date-picker-day'];
       if (isSameDay(date, today)) classes.push('date-picker-day--today');
-      if (dateFilterStart && isSameDay(date, dateFilterStart)) classes.push('date-picker-day--start');
-      if (dateFilterEnd && isSameDay(date, dateFilterEnd)) classes.push('date-picker-day--end');
-      if (dateFilterStart && dateFilterEnd && isBetweenDates(date, dateFilterStart, dateFilterEnd)) {
-        if (!isSameDay(date, dateFilterStart) && !isSameDay(date, dateFilterEnd)) {
+      if (dates.start && isSameDay(date, dates.start)) classes.push('date-picker-day--start');
+      if (dates.end && isSameDay(date, dates.end)) classes.push('date-picker-day--end');
+      if (dates.start && dates.end && isBetweenDates(date, dates.start, dates.end)) {
+        if (!isSameDay(date, dates.start) && !isSameDay(date, dates.end)) {
           classes.push('date-picker-day--in-range');
         }
       }
@@ -857,16 +886,15 @@
   }
 
   function handleDateClick(date) {
-    if (!datePickerSelecting || !dateFilterStart) {
-      dateFilterStart = date;
-      dateFilterEnd = null;
+    var dates = getDateFilterForTarget();
+    if (!datePickerSelecting || !dates.start) {
+      setDateFilterForTarget(date, null);
       datePickerSelecting = true;
     } else {
-      if (date.getTime() < dateFilterStart.getTime()) {
-        dateFilterEnd = dateFilterStart;
-        dateFilterStart = date;
+      if (date.getTime() < dates.start.getTime()) {
+        setDateFilterForTarget(date, dates.start);
       } else {
-        dateFilterEnd = date;
+        setDateFilterForTarget(dates.start, date);
       }
       datePickerSelecting = false;
     }
@@ -874,14 +902,39 @@
     renderCalendar();
   }
 
+  function getDateFilterForTarget() {
+    if (currentDatePickerTarget === 'leads') {
+      return { start: dateFilterStart, end: dateFilterEnd };
+    } else if (currentDatePickerTarget === 'sentInvites') {
+      return { start: sentInvitesDateStart, end: sentInvitesDateEnd };
+    } else if (currentDatePickerTarget === 'readLog') {
+      return { start: readLogDateStart, end: readLogDateEnd };
+    }
+    return { start: null, end: null };
+  }
+
+  function setDateFilterForTarget(start, end) {
+    if (currentDatePickerTarget === 'leads') {
+      dateFilterStart = start;
+      dateFilterEnd = end;
+    } else if (currentDatePickerTarget === 'sentInvites') {
+      sentInvitesDateStart = start;
+      sentInvitesDateEnd = end;
+    } else if (currentDatePickerTarget === 'readLog') {
+      readLogDateStart = start;
+      readLogDateEnd = end;
+    }
+  }
+
   function updateDatePickerDisplay() {
     if (!datePickerRangeDisplay) return;
-    if (!dateFilterStart) {
+    var dates = getDateFilterForTarget();
+    if (!dates.start) {
       datePickerRangeDisplay.innerHTML = '<span class="date-picker-range__label">Select start and end dates</span>';
-    } else if (!dateFilterEnd) {
-      datePickerRangeDisplay.innerHTML = '<span class="date-picker-range__dates">From ' + formatDateShort(dateFilterStart) + ' — select end date</span>';
+    } else if (!dates.end) {
+      datePickerRangeDisplay.innerHTML = '<span class="date-picker-range__dates">From ' + formatDateShort(dates.start) + ' — select end date</span>';
     } else {
-      datePickerRangeDisplay.innerHTML = '<span class="date-picker-range__dates">' + formatDateShort(dateFilterStart) + ' — ' + formatDateShort(dateFilterEnd) + '</span>';
+      datePickerRangeDisplay.innerHTML = '<span class="date-picker-range__dates">' + formatDateShort(dates.start) + ' — ' + formatDateShort(dates.end) + '</span>';
     }
   }
 
@@ -900,22 +953,44 @@
 
   function applyDateFilter() {
     if (dateFilterStart && dateFilterEnd) {
-      enrichFilterSet.add('date');
+      if (currentDatePickerTarget === 'leads') {
+        enrichFilterSet.add('date');
+        updateFilterButtons();
+        updateDateFilterButton();
+        applyFilters();
+      } else if (currentDatePickerTarget === 'sentInvites') {
+        sentInvitesFilterSet.add('date');
+        updateSentInvitesFilterButtons();
+        applySentInvitesFilters();
+      } else if (currentDatePickerTarget === 'readLog') {
+        readLogFilterSet.add('date');
+        updateReadLogFilterButtons();
+        applyReadLogFilters();
+      }
     }
     closeDatePicker();
-    updateFilterButtons();
-    updateDateFilterButton();
-    applyFilters();
   }
 
   function clearDateFilter() {
-    dateFilterStart = null;
-    dateFilterEnd = null;
-    datePickerSelecting = false;
-    enrichFilterSet.delete('date');
-    updateDateFilterButton();
-    renderCalendar();
-    updateDatePickerDisplay();
+    if (currentDatePickerTarget === 'leads') {
+      dateFilterStart = null;
+      dateFilterEnd = null;
+      datePickerSelecting = false;
+      enrichFilterSet.delete('date');
+      updateDateFilterButton();
+      renderCalendar();
+      updateDatePickerDisplay();
+    } else if (currentDatePickerTarget === 'sentInvites') {
+      sentInvitesDateStart = null;
+      sentInvitesDateEnd = null;
+      sentInvitesFilterSet.delete('date');
+      applySentInvitesFilters();
+    } else if (currentDatePickerTarget === 'readLog') {
+      readLogDateStart = null;
+      readLogDateEnd = null;
+      readLogFilterSet.delete('date');
+      applyReadLogFilters();
+    }
   }
 
   function updateDateFilterButton() {
@@ -956,6 +1031,144 @@
       (c.school    && String(c.school).toLowerCase().includes(k)) ||
       (c.major     && String(c.major).toLowerCase().includes(k))
     );
+  }
+
+  // ── Sent Invites Filter Functions ─────────────────────
+  function sentInviteMatchesSearch(invite, keyword) {
+    if (!keyword) return true;
+    var k = keyword.toLowerCase();
+    return (
+      (invite.firstName && String(invite.firstName).toLowerCase().includes(k)) ||
+      (invite.lastName && String(invite.lastName).toLowerCase().includes(k)) ||
+      (invite.description && String(invite.description).toLowerCase().includes(k)) ||
+      (invite.profileUrl && String(invite.profileUrl).toLowerCase().includes(k))
+    );
+  }
+
+  function filterSentInvites(invites) {
+    if (!invites || !Array.isArray(invites)) return [];
+    return invites.filter(function (invite) {
+      // Search filter
+      if (!sentInviteMatchesSearch(invite, sentInvitesSearchKeyword)) return false;
+
+      var connected = invite.connected === true || invite.connected === 'YES' || invite.connected === 'yes';
+
+      // Connection status filter
+      if (sentInvitesFilterSet.has('connected') && !connected) return false;
+      if (sentInvitesFilterSet.has('not_connected') && connected) return false;
+
+      // Date filter (by sentAt)
+      if (sentInvitesFilterSet.has('date') && sentInvitesDateStart && sentInvitesDateEnd) {
+        var sentDate = invite.sentAt ? new Date(invite.sentAt) : null;
+        if (!sentDate) return false;
+        var dayStart = new Date(sentInvitesDateStart.getFullYear(), sentInvitesDateStart.getMonth(), sentInvitesDateStart.getDate());
+        var dayEnd = new Date(sentInvitesDateEnd.getFullYear(), sentInvitesDateEnd.getMonth(), sentInvitesDateEnd.getDate(), 23, 59, 59, 999);
+        if (sentDate.getTime() < dayStart.getTime() || sentDate.getTime() > dayEnd.getTime()) return false;
+      }
+
+      return true;
+    });
+  }
+
+  function getSentInvitesFilterLabel() {
+    if (sentInvitesFilterSet.has('all')) return 'All';
+    if (sentInvitesFilterSet.has('connected')) return 'Connected';
+    if (sentInvitesFilterSet.has('not_connected')) return 'Not connected';
+    if (sentInvitesFilterSet.has('date')) return 'Date range';
+    return 'All';
+  }
+
+  function updateSentInvitesFilterButtons() {
+    if (!sentInvitesFilterMenu) return;
+    sentInvitesFilterMenu.querySelectorAll('.enrich-filter-dd__item').forEach(function (btn) {
+      var filter = btn.getAttribute('data-filter');
+      btn.classList.toggle('enrich-filter-dd__item--active', sentInvitesFilterSet.has(filter));
+    });
+  }
+
+  function applySentInvitesFilters() {
+    if (sentInvitesFilterLabel) sentInvitesFilterLabel.textContent = getSentInvitesFilterLabel();
+    updateSentInvitesFilterButtons();
+    refreshSentInvitesList();
+  }
+
+  function clearSentInvitesFilters() {
+    sentInvitesFilterSet.clear();
+    sentInvitesFilterSet.add('all');
+    sentInvitesSearchKeyword = '';
+    sentInvitesDateStart = null;
+    sentInvitesDateEnd = null;
+    if (sentInvitesSearchInput) sentInvitesSearchInput.value = '';
+    applySentInvitesFilters();
+  }
+
+  // ── Read Log Filter Functions ─────────────────────
+  function readLogMatchesSearch(entry, keyword) {
+    if (!keyword) return true;
+    var k = keyword.toLowerCase();
+    return (
+      (entry.firstName && String(entry.firstName).toLowerCase().includes(k)) ||
+      (entry.lastName && String(entry.lastName).toLowerCase().includes(k)) ||
+      (entry.bio && String(entry.bio).toLowerCase().includes(k)) ||
+      (entry.profileUrl && String(entry.profileUrl).toLowerCase().includes(k))
+    );
+  }
+
+  function filterReadLog(entries) {
+    if (!entries || !Array.isArray(entries)) return [];
+    return entries.filter(function (entry) {
+      // Search filter
+      if (!readLogMatchesSearch(entry, readLogSearchKeyword)) return false;
+
+      var connected = entry.connected === true || entry.connected === 'YES' || entry.connected === 'yes';
+
+      // Connection status filter
+      if (readLogFilterSet.has('connected') && !connected) return false;
+      if (readLogFilterSet.has('not_connected') && connected) return false;
+
+      // Date filter (by readAt or timestamp)
+      if (readLogFilterSet.has('date') && readLogDateStart && readLogDateEnd) {
+        var readDate = entry.readAt ? new Date(entry.readAt) : (entry.timestamp ? new Date(entry.timestamp) : null);
+        if (!readDate) return false;
+        var dayStart = new Date(readLogDateStart.getFullYear(), readLogDateStart.getMonth(), readLogDateStart.getDate());
+        var dayEnd = new Date(readLogDateEnd.getFullYear(), readLogDateEnd.getMonth(), readLogDateEnd.getDate(), 23, 59, 59, 999);
+        if (readDate.getTime() < dayStart.getTime() || readDate.getTime() > dayEnd.getTime()) return false;
+      }
+
+      return true;
+    });
+  }
+
+  function getReadLogFilterLabel() {
+    if (readLogFilterSet.has('all')) return 'All';
+    if (readLogFilterSet.has('connected')) return 'Connected';
+    if (readLogFilterSet.has('not_connected')) return 'Not connected';
+    if (readLogFilterSet.has('date')) return 'Date range';
+    return 'All';
+  }
+
+  function updateReadLogFilterButtons() {
+    if (!readLogFilterMenu) return;
+    readLogFilterMenu.querySelectorAll('.enrich-filter-dd__item').forEach(function (btn) {
+      var filter = btn.getAttribute('data-filter');
+      btn.classList.toggle('enrich-filter-dd__item--active', readLogFilterSet.has(filter));
+    });
+  }
+
+  function applyReadLogFilters() {
+    if (readLogFilterLabel) readLogFilterLabel.textContent = getReadLogFilterLabel();
+    updateReadLogFilterButtons();
+    refreshReadLogList();
+  }
+
+  function clearReadLogFilters() {
+    readLogFilterSet.clear();
+    readLogFilterSet.add('all');
+    readLogSearchKeyword = '';
+    readLogDateStart = null;
+    readLogDateEnd = null;
+    if (readLogSearchInput) readLogSearchInput.value = '';
+    applyReadLogFilters();
   }
 
   function getFilteredIndices() {
@@ -1521,6 +1734,7 @@
         // Date filter opens calendar instead of toggling
         if (value === 'date') {
           setFilterMenuOpen(false);
+          currentDatePickerTarget = 'leads';
           openDatePicker();
           return;
         }
@@ -1604,6 +1818,150 @@
       closeDatePicker();
     }
   });
+
+  // ── Sent Invites Filter Event Listeners ─────────────────────
+  if (sentInvitesFilterBtn && sentInvitesFilterMenu) {
+    sentInvitesFilterBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var isOpen = !sentInvitesFilterMenu.hidden;
+      sentInvitesFilterMenu.hidden = isOpen ? true : false;
+      sentInvitesFilterBtn.setAttribute('aria-expanded', String(!isOpen));
+    });
+
+    sentInvitesFilterMenu.addEventListener('click', function (e) {
+      var item = e.target.closest('.enrich-filter-dd__item');
+      if (!item) return;
+      var filter = item.getAttribute('data-filter');
+      if (!filter) return;
+
+      // Handle Date button specially
+      if (filter === 'date') {
+        sentInvitesFilterMenu.hidden = true;
+        sentInvitesFilterBtn.setAttribute('aria-expanded', 'false');
+        // Set up date picker for Sent Invites
+        currentDatePickerTarget = 'sentInvites';
+        openDatePicker();
+        return;
+      }
+
+      // Toggle filter
+      if (sentInvitesFilterSet.has(filter)) {
+        sentInvitesFilterSet.delete(filter);
+      } else {
+        sentInvitesFilterSet.add(filter);
+      }
+
+      // Handle mutual exclusivity for all/connected/not_connected
+      if (filter === 'all') {
+        sentInvitesFilterSet.delete('connected');
+        sentInvitesFilterSet.delete('not_connected');
+      } else if (filter === 'connected' || filter === 'not_connected') {
+        sentInvitesFilterSet.delete('all');
+        // Ensure only one connection filter is active
+        if (filter === 'connected') sentInvitesFilterSet.delete('not_connected');
+        if (filter === 'not_connected') sentInvitesFilterSet.delete('connected');
+      }
+
+      // Ensure at least one filter is selected
+      if (sentInvitesFilterSet.size === 0) {
+        sentInvitesFilterSet.add('all');
+      }
+
+      applySentInvitesFilters();
+    });
+
+    sentInvitesFilterClear.addEventListener('click', function () {
+      clearSentInvitesFilters();
+      sentInvitesFilterMenu.hidden = true;
+      sentInvitesFilterBtn.setAttribute('aria-expanded', 'false');
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!sentInvitesFilterMenu.hidden && !sentInvitesFilterWrap.contains(e.target)) {
+        sentInvitesFilterMenu.hidden = true;
+        sentInvitesFilterBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  if (sentInvitesSearchInput) {
+    sentInvitesSearchInput.addEventListener('input', function () {
+      sentInvitesSearchKeyword = sentInvitesSearchInput.value.trim();
+      refreshSentInvitesList();
+    });
+  }
+
+  // ── Read Log Filter Event Listeners ─────────────────────
+  if (readLogFilterBtn && readLogFilterMenu) {
+    readLogFilterBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var isOpen = !readLogFilterMenu.hidden;
+      readLogFilterMenu.hidden = isOpen ? true : false;
+      readLogFilterBtn.setAttribute('aria-expanded', String(!isOpen));
+    });
+
+    readLogFilterMenu.addEventListener('click', function (e) {
+      var item = e.target.closest('.enrich-filter-dd__item');
+      if (!item) return;
+      var filter = item.getAttribute('data-filter');
+      if (!filter) return;
+
+      // Handle Date button specially
+      if (filter === 'date') {
+        readLogFilterMenu.hidden = true;
+        readLogFilterBtn.setAttribute('aria-expanded', 'false');
+        // Set up date picker for Read Log
+        currentDatePickerTarget = 'readLog';
+        openDatePicker();
+        return;
+      }
+
+      // Toggle filter
+      if (readLogFilterSet.has(filter)) {
+        readLogFilterSet.delete(filter);
+      } else {
+        readLogFilterSet.add(filter);
+      }
+
+      // Handle mutual exclusivity for all/connected/not_connected
+      if (filter === 'all') {
+        readLogFilterSet.delete('connected');
+        readLogFilterSet.delete('not_connected');
+      } else if (filter === 'connected' || filter === 'not_connected') {
+        readLogFilterSet.delete('all');
+        // Ensure only one connection filter is active
+        if (filter === 'connected') readLogFilterSet.delete('not_connected');
+        if (filter === 'not_connected') readLogFilterSet.delete('connected');
+      }
+
+      // Ensure at least one filter is selected
+      if (readLogFilterSet.size === 0) {
+        readLogFilterSet.add('all');
+      }
+
+      applyReadLogFilters();
+    });
+
+    readLogFilterClear.addEventListener('click', function () {
+      clearReadLogFilters();
+      readLogFilterMenu.hidden = true;
+      readLogFilterBtn.setAttribute('aria-expanded', 'false');
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!readLogFilterMenu.hidden && !readLogFilterWrap.contains(e.target)) {
+        readLogFilterMenu.hidden = true;
+        readLogFilterBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  if (readLogSearchInput) {
+    readLogSearchInput.addEventListener('input', function () {
+      readLogSearchKeyword = readLogSearchInput.value.trim();
+      refreshReadLogList();
+    });
+  }
 
   applyFilters();
 
@@ -1985,6 +2343,126 @@
     }
   }
 
+  function updateSentInvitesUI() {
+    updateSentInvitesBadge();
+    refreshSentInvitesList();
+  }
+
+  function refreshSentInvitesList() {
+    if (!networkingList || !networkingListContent || !networkingEmptyState) return;
+
+    var filtered = filterSentInvites(sentInvites);
+
+    if (sentInvitesStats) {
+      sentInvitesStats.textContent = filtered.length + ' / ' + (sentInvites ? sentInvites.length : 0);
+    }
+
+    if (!filtered || filtered.length === 0) {
+      networkingList.hidden = true;
+      networkingEmptyState.hidden = false;
+      return;
+    }
+
+    networkingEmptyState.hidden = true;
+    networkingList.hidden = false;
+
+    networkingListContent.innerHTML = filtered.map(function (invite, idx) {
+      var url = invite && invite.profileUrl ? String(invite.profileUrl) : '';
+      var urlLabel = url ? shortUrlLabel(url, 9) : '';
+      var desc = invite && (invite.description || invite.bio) ? String(invite.description || invite.bio) : '';
+
+      var status = 'Not Connected';
+      if (invite) {
+        var key = nameKey(invite.firstName, invite.lastName);
+        if (leadsNameSet.has(key)) status = 'Connected';
+      }
+
+      var urlCell;
+      if (url) {
+        urlCell = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
+          '<span>' + esc(urlLabel) + '</span>' +
+          '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
+            '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
+          '</svg>' +
+        '</a>';
+      } else {
+        urlCell = '<span class="ctable__dash">Not Found</span>';
+      }
+
+      var firstNameCell = invite.firstName
+        ? '<span class="ctable__name" data-invite-index="' + idx + '">' + esc(invite.firstName) + '</span>'
+        : '<span class="ctable__dash">Not Found</span>';
+      var lastNameCell = invite.lastName
+        ? '<span class="ctable__name" data-invite-index="' + idx + '">' + esc(invite.lastName) + '</span>'
+        : '<span class="ctable__dash">Not Found</span>';
+
+      return '<tr>' +
+        '<td>' + firstNameCell + '</td>' +
+        '<td>' + lastNameCell + '</td>' +
+        '<td>' + urlCell + '</td>' +
+        '<td>' + esc(desc || 'Not Found') + '</td>' +
+        '<td>' + esc(status) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    networkingListContent.querySelectorAll('.ctable__name[data-invite-index]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var i = parseInt(el.getAttribute('data-invite-index'), 10);
+        var filtered = filterSentInvites(sentInvites);
+        if (isNaN(i) || !filtered[i]) return;
+        openNetworkingInviteCard(filtered[i]);
+      });
+    });
+  }
+
+  function updateReadLogUI() {
+    updateReadLogBadge();
+    refreshReadLogList();
+  }
+
+  function refreshReadLogList() {
+    if (!readLogList || !readLogListContent || !readLogEmptyState) return;
+
+    var filtered = filterReadLog(readLog);
+
+    if (readLogStats) {
+      readLogStats.textContent = filtered.length + ' / ' + (readLog ? readLog.length : 0);
+    }
+
+    if (!filtered || filtered.length === 0) {
+      readLogList.hidden = true;
+      readLogEmptyState.hidden = false;
+      return;
+    }
+
+    readLogEmptyState.hidden = true;
+    readLogList.hidden = false;
+
+    readLogListContent.innerHTML = filtered.map(function (item) {
+      var url = item && item.profileUrl ? String(item.profileUrl) : '';
+      var urlCell;
+      if (url) {
+        var displayUrl = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + '...';
+        urlCell = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
+          '<span>' + esc(displayUrl) + '</span>' +
+          '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
+            '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
+          '</svg>' +
+        '</a>';
+      } else {
+        urlCell = '<span class="ctable__dash">—</span>';
+      }
+
+      return '<tr>' +
+        '<td>' + (item.firstName ? esc(item.firstName) : '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + (item.lastName ? esc(item.lastName) : '<span class="ctable__dash">—</span>') + '</td>' +
+        '<td>' + urlCell + '</td>' +
+        '<td>' + esc(item.bio || item.description || '') + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
   function createKeywordTag(keyword) {
     var tag = document.createElement('span');
     tag.className = 'networking-tag';
@@ -2125,106 +2603,6 @@
       if (id) setNetworkingTab(id);
     });
   });
-
-  function updateSentInvitesUI() {
-    updateSentInvitesBadge();
-    
-    if (!networkingList || !networkingListContent || !networkingEmptyState) return;
-    
-    if (sentInvites.length === 0) {
-      networkingList.hidden = true;
-      networkingEmptyState.hidden = false;
-      return;
-    }
-    
-    networkingEmptyState.hidden = true;
-    networkingList.hidden = false;
-    
-    networkingListContent.innerHTML = sentInvites.map(function (invite, idx) {
-      var url = invite && invite.profileUrl ? String(invite.profileUrl) : '';
-      var urlLabel = url ? shortUrlLabel(url, 9) : '';
-      var desc = invite && (invite.description || invite.bio) ? String(invite.description || invite.bio) : '';
-
-      var status = 'Not Connected';
-      if (invite) {
-        var key = nameKey(invite.firstName, invite.lastName);
-        if (leadsNameSet.has(key)) status = 'Connected';
-      }
-
-      var urlCell;
-      if (url) {
-        urlCell = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
-          '<span>' + esc(urlLabel) + '</span>' +
-          '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
-            '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
-          '</svg>' +
-        '</a>';
-      } else {
-        urlCell = '<span class="ctable__dash">Not Found</span>';
-      }
-
-      var firstNameCell = invite.firstName
-        ? '<span class="ctable__name" data-invite-index="' + idx + '">' + esc(invite.firstName) + '</span>'
-        : '<span class="ctable__dash">Not Found</span>';
-      var lastNameCell = invite.lastName
-        ? '<span class="ctable__name" data-invite-index="' + idx + '">' + esc(invite.lastName) + '</span>'
-        : '<span class="ctable__dash">Not Found</span>';
-
-      return '<tr>' +
-        '<td>' + firstNameCell + '</td>' +
-        '<td>' + lastNameCell + '</td>' +
-        '<td>' + urlCell + '</td>' +
-        '<td>' + esc(desc || 'Not Found') + '</td>' +
-        '<td>' + esc(status) + '</td>' +
-      '</tr>';
-    }).join('');
-
-    networkingListContent.querySelectorAll('.ctable__name[data-invite-index]').forEach(function (el) {
-      el.addEventListener('click', function () {
-        var i = parseInt(el.getAttribute('data-invite-index'), 10);
-        if (isNaN(i) || !sentInvites[i]) return;
-        openNetworkingInviteCard(sentInvites[i]);
-      });
-    });
-  }
-
-  function updateReadLogUI() {
-    updateReadLogBadge();
-    if (!readLogList || !readLogListContent || !readLogEmptyState) return;
-
-    if (readLog.length === 0) {
-      readLogList.hidden = true;
-      readLogEmptyState.hidden = false;
-      return;
-    }
-
-    readLogEmptyState.hidden = true;
-    readLogList.hidden = false;
-
-    readLogListContent.innerHTML = readLog.map(function (item) {
-      var url = item && item.profileUrl ? String(item.profileUrl) : '';
-      var urlCell;
-      if (url) {
-        var displayUrl = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-        if (displayUrl.length > 35) displayUrl = displayUrl.slice(0, 32) + '...';
-        urlCell = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="ctable__link" title="' + esc(url) + '">' +
-          '<span>' + esc(displayUrl) + '</span>' +
-          '<svg class="ctable__ext" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
-            '<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>' +
-          '</svg>' +
-        '</a>';
-      } else {
-        urlCell = '<span class="ctable__dash">—</span>';
-      }
-
-      return '<tr>' +
-        '<td>' + (item.firstName ? esc(item.firstName) : '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + (item.lastName ? esc(item.lastName) : '<span class="ctable__dash">—</span>') + '</td>' +
-        '<td>' + urlCell + '</td>' +
-        '<td>' + esc(item.bio || item.description || '') + '</td>' +
-      '</tr>';
-    }).join('');
-  }
 
   loadNetworkingKeywords();
   loadSentInvites();

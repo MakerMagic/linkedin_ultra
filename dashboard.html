@@ -678,6 +678,39 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
             hidden
           >
             <section class="glass card networking-card" aria-labelledby="networking-sent-title">
+              <!-- Filters & Search Bar -->
+              <div class="enrich-bar" id="sentInvitesFilterBar">
+                <div class="enrich-bar__left">
+                  <div class="enrich-search" id="sentInvitesSearchWrap">
+                    <svg class="enrich-search__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                    </svg>
+                    <input type="search" id="sentInvitesSearchInput" class="enrich-search__input" placeholder="Search..." autocomplete="off">
+                  </div>
+                </div>
+                <div class="enrich-bar__right">
+                  <div class="enrich-filter" id="sentInvitesFilterWrap">
+                    <span class="enrich-filter__label">Filter</span>
+                    <div class="enrich-filter-dd" id="sentInvitesFilterDd">
+                      <button type="button" class="enrich-filter-dd__btn" id="sentInvitesFilterBtn" aria-haspopup="menu" aria-expanded="false">
+                        <span class="enrich-filter-dd__value" id="sentInvitesFilterLabel">All</span>
+                        <svg class="enrich-filter-dd__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                      </button>
+                      <div class="enrich-filter-dd__menu" id="sentInvitesFilterMenu" role="menu" hidden>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="all">All</button>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="connected">Connected</button>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="not_connected">Not connected</button>
+                        <button type="button" class="enrich-filter-dd__item" id="sentInvitesDateBtn" data-filter="date">Date</button>
+                        <button type="button" class="enrich-filter-dd__clear" id="sentInvitesFilterClear">Clear all</button>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="enrich-stats" id="sentInvitesStats"></span>
+                </div>
+              </div>
+
               <div class="networking-sent-layout">
                 <!-- Empty State -->
                 <div class="networking-empty" id="networkingEmptyState">
@@ -737,7 +770,41 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
             hidden
           >
             <section class="glass card networking-card" aria-labelledby="networking-read-title">
+              <!-- Filters & Search Bar -->
+              <div class="enrich-bar" id="readLogFilterBar">
+                <div class="enrich-bar__left">
+                  <div class="enrich-search" id="readLogSearchWrap">
+                    <svg class="enrich-search__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                    </svg>
+                    <input type="search" id="readLogSearchInput" class="enrich-search__input" placeholder="Search..." autocomplete="off">
+                  </div>
+                </div>
+                <div class="enrich-bar__right">
+                  <div class="enrich-filter" id="readLogFilterWrap">
+                    <span class="enrich-filter__label">Filter</span>
+                    <div class="enrich-filter-dd" id="readLogFilterDd">
+                      <button type="button" class="enrich-filter-dd__btn" id="readLogFilterBtn" aria-haspopup="menu" aria-expanded="false">
+                        <span class="enrich-filter-dd__value" id="readLogFilterLabel">All</span>
+                        <svg class="enrich-filter-dd__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                      </button>
+                      <div class="enrich-filter-dd__menu" id="readLogFilterMenu" role="menu" hidden>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="all">All</button>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="connected">Connected</button>
+                        <button type="button" class="enrich-filter-dd__item" data-filter="not_connected">Not connected</button>
+                        <button type="button" class="enrich-filter-dd__item" id="readLogDateBtn" data-filter="date">Date</button>
+                        <button type="button" class="enrich-filter-dd__clear" id="readLogFilterClear">Clear all</button>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="enrich-stats" id="readLogStats"></span>
+                </div>
+              </div>
+
               <div class="networking-sent-layout">
+                <!-- Empty State -->
                 <div class="networking-empty" id="readLogEmptyState">
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <circle cx="12" cy="12" r="10"/>
@@ -750,6 +817,7 @@ m-673 -62 c19 -19 14 -46 -9 -59 -18 -9 -25 -7 -41 9 -16 16 -18 23 -9 41 13
                   </div>
                 </div>
 
+                <!-- Read Log Table (hidden by default) -->
                 <div class="table-wrap" id="readLogList" hidden>
                   <table class="ctable" id="readLogTable" aria-label="Read log table">
                     <colgroup>
