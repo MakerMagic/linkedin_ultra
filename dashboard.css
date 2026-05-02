@@ -4751,3 +4751,22 @@ html,body {
   cursor: not-allowed;
   transform: none;
 }
+
+/* Pagination for Sent Invites and Read Log */
+#sentInvitesPagination,
+#readLogPagination {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+#sentInvitesPaginationInfo,
+#readLogPaginationInfo {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1;
+}

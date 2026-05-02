@@ -54,6 +54,10 @@
   var tableCurrentPage = 1;
   var currentLeadsTab  = 'sync';
 
+  // Pagination state for Sent Invites and Read Log
+  var sentInvitesCurrentPage = 1;
+  var readLogCurrentPage = 1;
+
   // *******************************************************
   // Demo video (Help tab)
   var demoVideo    = document.getElementById('demoVideo');
@@ -1041,6 +1045,7 @@
       (invite.firstName && String(invite.firstName).toLowerCase().includes(k)) ||
       (invite.lastName && String(invite.lastName).toLowerCase().includes(k)) ||
       (invite.description && String(invite.description).toLowerCase().includes(k)) ||
+      (invite.bio && String(invite.bio).toLowerCase().includes(k)) ||
       (invite.profileUrl && String(invite.profileUrl).toLowerCase().includes(k))
     );
   }
@@ -1087,6 +1092,7 @@
   }
 
   function applySentInvitesFilters() {
+    sentInvitesCurrentPage = 1;
     if (sentInvitesFilterLabel) sentInvitesFilterLabel.textContent = getSentInvitesFilterLabel();
     updateSentInvitesFilterButtons();
     refreshSentInvitesList();
@@ -1110,6 +1116,7 @@
       (entry.firstName && String(entry.firstName).toLowerCase().includes(k)) ||
       (entry.lastName && String(entry.lastName).toLowerCase().includes(k)) ||
       (entry.bio && String(entry.bio).toLowerCase().includes(k)) ||
+      (entry.description && String(entry.description).toLowerCase().includes(k)) ||
       (entry.profileUrl && String(entry.profileUrl).toLowerCase().includes(k))
     );
   }
@@ -1156,6 +1163,7 @@
   }
 
   function applyReadLogFilters() {
+    readLogCurrentPage = 1;
     if (readLogFilterLabel) readLogFilterLabel.textContent = getReadLogFilterLabel();
     updateReadLogFilterButtons();
     refreshReadLogList();
@@ -1887,6 +1895,7 @@
   if (sentInvitesSearchInput) {
     sentInvitesSearchInput.addEventListener('input', function () {
       sentInvitesSearchKeyword = sentInvitesSearchInput.value.trim();
+      sentInvitesCurrentPage = 1;
       refreshSentInvitesList();
     });
   }
@@ -1959,6 +1968,7 @@
   if (readLogSearchInput) {
     readLogSearchInput.addEventListener('input', function () {
       readLogSearchKeyword = readLogSearchInput.value.trim();
+      readLogCurrentPage = 1;
       refreshReadLogList();
     });
   }
@@ -2357,7 +2367,20 @@
       sentInvitesStats.textContent = filtered.length + ' / ' + (sentInvites ? sentInvites.length : 0);
     }
 
-    if (!filtered || filtered.length === 0) {
+    // Pagination
+    var totalItems = filtered.length;
+    var totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
+    if (sentInvitesCurrentPage > totalPages) sentInvitesCurrentPage = totalPages;
+    if (sentInvitesCurrentPage < 1) sentInvitesCurrentPage = 1;
+
+    var start = (sentInvitesCurrentPage - 1) * PAGE_SIZE;
+    var end = Math.min(start + PAGE_SIZE, totalItems);
+    var pageItems = filtered.slice(start, end);
+
+    // Render pagination
+    renderSentInvitesPagination(totalItems, totalPages);
+
+    if (!pageItems || pageItems.length === 0) {
       networkingList.hidden = true;
       networkingEmptyState.hidden = false;
       return;
@@ -2366,7 +2389,8 @@
     networkingEmptyState.hidden = true;
     networkingList.hidden = false;
 
-    networkingListContent.innerHTML = filtered.map(function (invite, idx) {
+    networkingListContent.innerHTML = pageItems.map(function (invite, idx) {
+      var actualIdx = start + idx;
       var url = invite && invite.profileUrl ? String(invite.profileUrl) : '';
       var urlLabel = url ? shortUrlLabel(url, 9) : '';
       var desc = invite && (invite.description || invite.bio) ? String(invite.description || invite.bio) : '';
@@ -2390,10 +2414,10 @@
       }
 
       var firstNameCell = invite.firstName
-        ? '<span class="ctable__name" data-invite-index="' + idx + '">' + esc(invite.firstName) + '</span>'
+        ? '<span class="ctable__name" data-invite-index="' + actualIdx + '">' + esc(invite.firstName) + '</span>'
         : '<span class="ctable__dash">Not Found</span>';
       var lastNameCell = invite.lastName
-        ? '<span class="ctable__name" data-invite-index="' + idx + '">' + esc(invite.lastName) + '</span>'
+        ? '<span class="ctable__name" data-invite-index="' + actualIdx + '">' + esc(invite.lastName) + '</span>'
         : '<span class="ctable__dash">Not Found</span>';
 
       return '<tr>' +
@@ -2408,9 +2432,73 @@
     networkingListContent.querySelectorAll('.ctable__name[data-invite-index]').forEach(function (el) {
       el.addEventListener('click', function () {
         var i = parseInt(el.getAttribute('data-invite-index'), 10);
-        var filtered = filterSentInvites(sentInvites);
         if (isNaN(i) || !filtered[i]) return;
         openNetworkingInviteCard(filtered[i]);
+      });
+    });
+  }
+
+  function renderSentInvitesPagination(totalItems, totalPages) {
+    var container = document.getElementById('sentInvitesPagination');
+    var info = document.getElementById('sentInvitesPaginationInfo');
+    if (!container) return;
+
+    if (info) {
+      var start = totalItems === 0 ? 0 : (sentInvitesCurrentPage - 1) * PAGE_SIZE + 1;
+      var end = Math.min(sentInvitesCurrentPage * PAGE_SIZE, totalItems);
+      info.textContent = totalItems === 0 ? '0 items' : start + '-' + end + ' of ' + totalItems;
+    }
+
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+
+    var html = '';
+
+    // Prev button
+    html += '<button type="button" class="page-btn page-btn--arrow" data-page="prev" ' + (sentInvitesCurrentPage === 1 ? 'disabled' : '') + '>' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<polyline points="15 18 9 12 15 6"></polyline>' +
+      '</svg>' +
+    '</button>';
+
+    // Page numbers
+    for (var i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= sentInvitesCurrentPage - 1 && i <= sentInvitesCurrentPage + 1)) {
+        html += '<button type="button" class="page-btn ' + (i === sentInvitesCurrentPage ? 'page-btn--active' : '') + '" data-page="' + i + '">' + i + '</button>';
+      } else if (i === sentInvitesCurrentPage - 2 || i === sentInvitesCurrentPage + 2) {
+        html += '<span class="pagination-ellipsis">...</span>';
+      }
+    }
+
+    // Next button
+    html += '<button type="button" class="page-btn page-btn--arrow" data-page="next" ' + (sentInvitesCurrentPage === totalPages ? 'disabled' : '') + '>' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<polyline points="9 18 15 12 9 6"></polyline>' +
+      '</svg>' +
+    '</button>';
+
+    container.innerHTML = html;
+
+    // Add event listeners
+    container.querySelectorAll('.page-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var page = btn.getAttribute('data-page');
+        if (page === 'prev') {
+          if (sentInvitesCurrentPage > 1) {
+            sentInvitesCurrentPage--;
+            refreshSentInvitesList();
+          }
+        } else if (page === 'next') {
+          if (sentInvitesCurrentPage < totalPages) {
+            sentInvitesCurrentPage++;
+            refreshSentInvitesList();
+          }
+        } else {
+          sentInvitesCurrentPage = parseInt(page, 10);
+          refreshSentInvitesList();
+        }
       });
     });
   }
@@ -2429,7 +2517,20 @@
       readLogStats.textContent = filtered.length + ' / ' + (readLog ? readLog.length : 0);
     }
 
-    if (!filtered || filtered.length === 0) {
+    // Pagination
+    var totalItems = filtered.length;
+    var totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
+    if (readLogCurrentPage > totalPages) readLogCurrentPage = totalPages;
+    if (readLogCurrentPage < 1) readLogCurrentPage = 1;
+
+    var start = (readLogCurrentPage - 1) * PAGE_SIZE;
+    var end = Math.min(start + PAGE_SIZE, totalItems);
+    var pageItems = filtered.slice(start, end);
+
+    // Render pagination
+    renderReadLogPagination(totalItems, totalPages);
+
+    if (!pageItems || pageItems.length === 0) {
       readLogList.hidden = true;
       readLogEmptyState.hidden = false;
       return;
@@ -2438,7 +2539,7 @@
     readLogEmptyState.hidden = true;
     readLogList.hidden = false;
 
-    readLogListContent.innerHTML = filtered.map(function (item) {
+    readLogListContent.innerHTML = pageItems.map(function (item) {
       var url = item && item.profileUrl ? String(item.profileUrl) : '';
       var urlCell;
       if (url) {
@@ -2461,6 +2562,71 @@
         '<td>' + esc(item.bio || item.description || '') + '</td>' +
       '</tr>';
     }).join('');
+  }
+
+  function renderReadLogPagination(totalItems, totalPages) {
+    var container = document.getElementById('readLogPagination');
+    var info = document.getElementById('readLogPaginationInfo');
+    if (!container) return;
+
+    if (info) {
+      var start = totalItems === 0 ? 0 : (readLogCurrentPage - 1) * PAGE_SIZE + 1;
+      var end = Math.min(readLogCurrentPage * PAGE_SIZE, totalItems);
+      info.textContent = totalItems === 0 ? '0 items' : start + '-' + end + ' of ' + totalItems;
+    }
+
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+
+    var html = '';
+
+    // Prev button
+    html += '<button type="button" class="page-btn page-btn--arrow" data-page="prev" ' + (readLogCurrentPage === 1 ? 'disabled' : '') + '>' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<polyline points="15 18 9 12 15 6"></polyline>' +
+      '</svg>' +
+    '</button>';
+
+    // Page numbers
+    for (var i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= readLogCurrentPage - 1 && i <= readLogCurrentPage + 1)) {
+        html += '<button type="button" class="page-btn ' + (i === readLogCurrentPage ? 'page-btn--active' : '') + '" data-page="' + i + '">' + i + '</button>';
+      } else if (i === readLogCurrentPage - 2 || i === readLogCurrentPage + 2) {
+        html += '<span class="pagination-ellipsis">...</span>';
+      }
+    }
+
+    // Next button
+    html += '<button type="button" class="page-btn page-btn--arrow" data-page="next" ' + (readLogCurrentPage === totalPages ? 'disabled' : '') + '>' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<polyline points="9 18 15 12 9 6"></polyline>' +
+      '</svg>' +
+    '</button>';
+
+    container.innerHTML = html;
+
+    // Add event listeners
+    container.querySelectorAll('.page-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var page = btn.getAttribute('data-page');
+        if (page === 'prev') {
+          if (readLogCurrentPage > 1) {
+            readLogCurrentPage--;
+            refreshReadLogList();
+          }
+        } else if (page === 'next') {
+          if (readLogCurrentPage < totalPages) {
+            readLogCurrentPage++;
+            refreshReadLogList();
+          }
+        } else {
+          readLogCurrentPage = parseInt(page, 10);
+          refreshReadLogList();
+        }
+      });
+    });
   }
 
   function createKeywordTag(keyword) {
