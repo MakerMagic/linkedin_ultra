@@ -2363,10 +2363,6 @@
 
     var filtered = filterSentInvites(sentInvites);
 
-    if (sentInvitesStats) {
-      sentInvitesStats.textContent = filtered.length + ' / ' + (sentInvites ? sentInvites.length : 0);
-    }
-
     // Pagination
     var totalItems = filtered.length;
     var totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
@@ -2512,10 +2508,6 @@
     if (!readLogList || !readLogListContent || !readLogEmptyState) return;
 
     var filtered = filterReadLog(readLog);
-
-    if (readLogStats) {
-      readLogStats.textContent = filtered.length + ' / ' + (readLog ? readLog.length : 0);
-    }
 
     // Pagination
     var totalItems = filtered.length;
